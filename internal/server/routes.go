@@ -1,6 +1,17 @@
 package server
 
-import "net/http"
+import (
+	"encoding/json"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/url"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+)
 
 func (s *Server) RegisterRoutes() http.Handler {
 	mux := http.NewServeMux()
@@ -10,8 +21,219 @@ func (s *Server) RegisterRoutes() http.Handler {
 	return mux
 }
 
-func (s *Server) LoginHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+type OAuthCode struct {
+	Code     string `json:"code"`
+	Verifier string `json:"verifier"`
+}
 
+type OAuthToken struct {
+	AccessToken string `json:"access_token"`
+	ExpiresIn   int    `json:"expires_in"`
+	TokenType   string `json:"token_type"`
+	Scope       string `json:"scope"`
+	Sub         string `json:"sub"`
+	Username    string `json:"username"`
+}
+
+type User struct {
+	UUID string `json:"uuid"`
+	Name string `json:"name"`
+}
+
+type JWTClaims struct {
+	UserID   string
+	UserName string
+	jwt.RegisteredClaims
+}
+
+type ErrorResponse struct {
+	Error string
+	Code  int
+}
+
+func writeError(w http.ResponseWriter, message string, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+
+	response := ErrorResponse{
+		Error: message,
+		Code:  code,
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+func (s *Server) LoginHandler() http.Handler {
+	clientSecret := os.Getenv("CLIENT_SECRET")
+	jwtSecret := os.Getenv("JWT_SECRET")
+
+	if clientSecret == "" {
+		slog.Error("CLIENT_SECRET environment variable is required")
+		os.Exit(1)
+	}
+	if jwtSecret == "" {
+		slog.Error("JWT_SECRET environment variable is required")
+		os.Exit(1)
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Content-Type") != "application/json" {
+			slog.Warn("invalid content type", "content_type", r.Header.Get("Content-Type"), "expected", "application/json")
+			writeError(w, "Content-Type must be application/json", http.StatusBadRequest)
+			return
+		}
+
+		var code OAuthCode
+		if err := json.NewDecoder(r.Body).Decode(&code); err != nil {
+			slog.Error("failed to decode request body", "error", err)
+			writeError(w, "Invalid JSON format in request body", http.StatusBadRequest)
+			return
+		}
+
+		if strings.TrimSpace(code.Code) == "" {
+			writeError(w, "Code is required", http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(code.Verifier) == "" {
+			writeError(w, "Verifier is required", http.StatusBadRequest)
+			return
+		}
+
+		reqData := url.Values{}
+		reqData.Add("client_id", "exileprofit")
+		reqData.Add("client_secret", clientSecret)
+		reqData.Add("grant_type", "authorization_code")
+		reqData.Add("code", code.Code)
+		reqData.Add("redirect_uri", "https://exile-profit.com/auth/poe")
+		reqData.Add("scope", "account:profile account:stashes account:characters")
+		reqData.Add("code_verifier", code.Verifier)
+
+		req, err := http.NewRequest("POST", "https://www.pathofexile.com/oauth/token", strings.NewReader(reqData.Encode()))
+		if err != nil {
+			slog.Error("failed to create OAuth token request", "error", err)
+			writeError(w, "Internal server error: failed to create token exchange request", http.StatusInternalServerError)
+			return
+		}
+
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("User-Agent", "OAuth exileprofit/0.0.1 (contact: vyaryw@gmail.com)")
+
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			slog.Error("OAuth token request failed", "error", err, "url", "https://www.pathofexile.com/oauth/token")
+			writeError(w, "Failed to communicate with Path of Exile OAuth service", http.StatusBadGateway)
+			return
+		}
+		defer res.Body.Close()
+
+		if res.StatusCode != http.StatusOK {
+			var body []byte
+
+			body, err = io.ReadAll(res.Body)
+			if err != nil {
+				slog.Error("failed to read OAuth error response body", "error", err, "status_code", res.StatusCode)
+				writeError(w, "OAuth token exchange failed and unable to read error details", http.StatusBadGateway)
+				return
+			}
+
+			slog.Error("OAuth token exchange failed", "status_code", res.StatusCode, "response_body", string(body))
+
+			// test different errors and create custom messages
+			writeError(w, "OAuth token exchange failed with upstream error", http.StatusBadGateway)
+			return
+		}
+
+		var token OAuthToken
+		err = json.NewDecoder(res.Body).Decode(&token)
+		if err != nil {
+			slog.Error("failed to decode OAuth token response", "error", err)
+			writeError(w, "Invalid response format from OAuth service", http.StatusBadGateway)
+			return
+		}
+
+		// save token in db for later use
+
+		reqUser, err := http.NewRequest("GET", "https://api.pathofexile.com/profile", nil)
+		if err != nil {
+			slog.Error("failed to create user profile request", "error", err)
+			writeError(w, "Internal server error: failed to create profile request", http.StatusInternalServerError)
+			return
+		}
+
+		reqUser.Header.Set("User-Agent", "OAuth exileprofit/0.0.1 (contact: vyaryw@gmail.com)")
+		reqUser.Header.Set("Authorization", "Bearer "+token.AccessToken)
+
+		resUser, err := http.DefaultClient.Do(reqUser)
+		if err != nil {
+			slog.Error("user profile request failed", "error", err)
+			writeError(w, "Failed to retrieve user profile from Path of Exile API", http.StatusBadGateway)
+			return
+		}
+		defer resUser.Body.Close()
+
+		if resUser.StatusCode != http.StatusOK {
+			var body []byte
+
+			body, err = io.ReadAll(r.Body)
+			if err != nil {
+				slog.Error("failed to read user profile error response", "error", err, "status_code", resUser.StatusCode)
+				writeError(w, "Failed to retrieve user profile and unable to read error details", http.StatusBadGateway)
+				return
+			}
+
+			slog.Error("failed to get user profle", "status_code", resUser.StatusCode, "body", string(body))
+
+			// track errors and add custom responses
+			writeError(w, "Unable to retrieve user profile", http.StatusBadGateway)
+			return
+		}
+
+		var user User
+		if err = json.NewDecoder(resUser.Body).Decode(&user); err != nil {
+			writeError(w, "Failed to decode user", http.StatusInternalServerError)
+			return
+		}
+
+		now := time.Now()
+		claims := JWTClaims{
+			UserID:   user.UUID,
+			UserName: user.Name,
+			RegisteredClaims: jwt.RegisteredClaims{
+				ExpiresAt: jwt.NewNumericDate(now.Add(24 * time.Hour)),
+				IssuedAt:  jwt.NewNumericDate(now),
+				NotBefore: jwt.NewNumericDate(now),
+				Issuer:    "exile-profit",
+				Subject:   user.UUID,
+			},
+		}
+
+		jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+		signedToken, err := jwtToken.SignedString([]byte(jwtSecret))
+		if err != nil {
+			slog.Error("failed to sign JWT token", "error", err, "user_uuid", user.UUID)
+			writeError(w, "Internal server error: failed to create authentication token", http.StatusInternalServerError)
+			return
+		}
+
+		http.SetCookie(w, &http.Cookie{
+			Name:     "jwt_token",
+			Value:    signedToken,
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+			MaxAge:   86400,
+			Path:     "/",
+		})
+
+		w.Header().Set("Content-Type", "application/json")
+		response := map[string]any{
+			"success": true,
+			"user":    user.Name,
+		}
+
+		if err = json.NewEncoder(w).Encode(response); err != nil {
+			slog.Error("failed to encode success response", "error", err)
+		}
 	})
 }
