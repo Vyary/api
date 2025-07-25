@@ -1,32 +1,34 @@
 # Stage 1: Build the binary
 FROM golang:1.24.5-bookworm AS builder
 
-# Set up a working directory
 WORKDIR /app
 
-# Cache dependencies by copying go.mod and go.sum first
+# BuildKit needs this to pass arch info
+ARG TARGETARCH
+
+# Copy go mod first to leverage cache
 COPY go.mod go.sum ./
 
-# Download dependencies
-RUN go mod download
+# Use BuildKit cache mount for modules
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
-# Copy the source code
+# Copy source
 COPY . .
 
-# Build the binary for multiple architectures
-ARG TARGETARCH
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH go build -ldflags="-s -w" -o bin/main ./cmd/main.go
+# Use BuildKit cache for mod + build cache
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH \
+    go build -ldflags="-s -w" -o bin/main ./cmd/main.go
 
-# Stage 2: Final image
+# Stage 2: Minimal runtime
 FROM gcr.io/distroless/cc
 
-# Set the working directory
 WORKDIR /app
 
 COPY --from=builder /app/bin/main bin/main
 
-# Expose port
 EXPOSE 8080
 
-# Run the binary
 ENTRYPOINT ["./bin/main"]
