@@ -29,8 +29,8 @@ var (
 // setupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
 func SetupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, err error) {
-	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-	service := os.Getenv("SERVICE_NAME")
+	endpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	service = os.Getenv("SERVICE_NAME")
 
 	if endpoint == "" {
 		slog.Error("OTEL_EXPORTER_OTLP_ENDPOINT environment variable is needed")
