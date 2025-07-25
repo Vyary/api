@@ -17,7 +17,7 @@ type service struct {
 
 func New() Service {
 	dbName := os.Getenv("DB_NAME")
-	token := os.Getenv("TOKEN")
+	token := os.Getenv("DB_TOKEN")
 
 	if dbName == "" {
 		slog.Error("DB_NAME env variable is required")
