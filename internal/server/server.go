@@ -26,6 +26,7 @@ func New() *http.Server {
 		port: port,
 		db:   database.New(),
 	}
+	
 
 	return &http.Server{
 		Addr:              fmt.Sprintf(":%s", srv.port),
