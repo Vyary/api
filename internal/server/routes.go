@@ -122,7 +122,7 @@ func (s *Server) LoginHandler() http.Handler {
 		res, err := http.DefaultClient.Do(req)
 		if err != nil {
 			slog.Error("OAuth token request failed", "error", err, "url", "https://www.pathofexile.com/oauth/token")
-			writeError(w, "Failed to communicate with Path of Exile OAuth service", http.StatusBadGateway)
+			writeError(w, "Failed to communicate with Path of Exile OAuth service", http.StatusInternalServerError)
 			return
 		}
 		defer res.Body.Close()
@@ -133,14 +133,14 @@ func (s *Server) LoginHandler() http.Handler {
 			body, err = io.ReadAll(res.Body)
 			if err != nil {
 				slog.Error("failed to read OAuth error response body", "error", err, "status_code", res.StatusCode)
-				writeError(w, "OAuth token exchange failed and unable to read error details", http.StatusBadGateway)
+				writeError(w, "OAuth token exchange failed and unable to read error details", http.StatusInternalServerError)
 				return
 			}
 
 			slog.Error("OAuth token exchange failed", "status_code", res.StatusCode, "response_body", string(body))
 
 			// test different errors and create custom messages
-			writeError(w, "OAuth token exchange failed with upstream error", http.StatusBadGateway)
+			writeError(w, "OAuth token exchange failed with upstream error", http.StatusInternalServerError)
 			return
 		}
 
@@ -148,7 +148,7 @@ func (s *Server) LoginHandler() http.Handler {
 		err = json.NewDecoder(res.Body).Decode(&token)
 		if err != nil {
 			slog.Error("failed to decode OAuth token response", "error", err)
-			writeError(w, "Invalid response format from OAuth service", http.StatusBadGateway)
+			writeError(w, "Invalid response format from OAuth service", http.StatusInternalServerError)
 			return
 		}
 
@@ -167,7 +167,7 @@ func (s *Server) LoginHandler() http.Handler {
 		resUser, err := http.DefaultClient.Do(reqUser)
 		if err != nil {
 			slog.Error("user profile request failed", "error", err)
-			writeError(w, "Failed to retrieve user profile from Path of Exile API", http.StatusBadGateway)
+			writeError(w, "Failed to retrieve user profile from Path of Exile API", http.StatusInternalServerError)
 			return
 		}
 		defer resUser.Body.Close()
@@ -178,14 +178,14 @@ func (s *Server) LoginHandler() http.Handler {
 			body, err = io.ReadAll(r.Body)
 			if err != nil {
 				slog.Error("failed to read user profile error response", "error", err, "status_code", resUser.StatusCode)
-				writeError(w, "Failed to retrieve user profile and unable to read error details", http.StatusBadGateway)
+				writeError(w, "Failed to retrieve user profile and unable to read error details", http.StatusInternalServerError)
 				return
 			}
 
 			slog.Error("failed to get user profle", "status_code", resUser.StatusCode, "body", string(body))
 
 			// track errors and add custom responses
-			writeError(w, "Unable to retrieve user profile", http.StatusBadGateway)
+			writeError(w, "Unable to retrieve user profile", http.StatusInternalServerError)
 			return
 		}
 
