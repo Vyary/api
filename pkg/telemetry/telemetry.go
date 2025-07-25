@@ -3,7 +3,6 @@ package telemetry
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"time"
 
@@ -34,7 +33,7 @@ func SetupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	service := os.Getenv("SERVICE_NAME")
 
 	if endpoint == "" {
-		return nil, fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT environment variable is required")
+		slog.Error("OTEL_EXPORTER_OTLP_ENDPOINT environment variable is needed")
 	}
 	if service == "" {
 		slog.Error("SERVICE_NAME environment variable is needed")

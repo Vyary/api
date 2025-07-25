@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -27,7 +28,7 @@ func New() *http.Server {
 	}
 
 	return &http.Server{
-		Addr:              srv.port,
+		Addr:              fmt.Sprintf(":%s", srv.port),
 		Handler:           srv.RegisterRoutes(),
 		ReadTimeout:       20 * time.Second,
 		WriteTimeout:      15 * time.Second,
