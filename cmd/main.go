@@ -36,7 +36,7 @@ func run() error {
 	}
 	defer otelShutdown(context.Background())
 
-	// slog.SetDefault(logger)
+	slog.SetDefault(logger)
 
 	srv := server.New()
 
@@ -47,7 +47,7 @@ func run() error {
 
 	select {
 	case err = <-srvErr:
-		return err // TODO: more context
+		return err
 	case <-ctx.Done():
 		stop()
 	}

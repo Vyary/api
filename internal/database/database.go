@@ -6,10 +6,13 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/Vyary/api/internal/models"
 	_ "github.com/tursodatabase/libsql-client-go/libsql"
 )
 
-type Service interface{}
+type Service interface{
+	SaveToken(id string, token models.OAuthToken) error
+}
 
 type service struct {
 	db *sql.DB
@@ -38,4 +41,15 @@ func New() Service {
 	}
 
 	return &service{db: db}
+}
+
+func (s *service) SaveToken(id string, token models.OAuthToken) error {
+	query := `INSERT INTO tokens (id, token) VALUES (?, ?)`
+
+	_, err := s.db.Exec(query, id, token)
+	if err != nil {
+		return fmt.Errorf("Failed to save token: "+err.Error())
+	}
+
+	return nil
 }

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Vyary/api/internal/models"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -21,41 +22,11 @@ func (s *Server) RegisterRoutes() http.Handler {
 	return mux
 }
 
-type OAuthCode struct {
-	Code     string `json:"code"`
-	Verifier string `json:"verifier"`
-}
-
-type OAuthToken struct {
-	AccessToken string `json:"access_token"`
-	ExpiresIn   int    `json:"expires_in"`
-	TokenType   string `json:"token_type"`
-	Scope       string `json:"scope"`
-	Sub         string `json:"sub"`
-	Username    string `json:"username"`
-}
-
-type User struct {
-	UUID string `json:"uuid"`
-	Name string `json:"name"`
-}
-
-type JWTClaims struct {
-	UserID   string
-	UserName string
-	jwt.RegisteredClaims
-}
-
-type ErrorResponse struct {
-	Error string
-	Code  int
-}
-
 func writeError(w http.ResponseWriter, message string, code int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 
-	response := ErrorResponse{
+	response := models.ErrorResponse{
 		Error: message,
 		Code:  code,
 	}
@@ -83,7 +54,7 @@ func (s *Server) LoginHandler() http.Handler {
 			return
 		}
 
-		var code OAuthCode
+		var code models.OAuthCode
 		if err := json.NewDecoder(r.Body).Decode(&code); err != nil {
 			slog.Error("failed to decode request body", "error", err)
 			writeError(w, "Invalid JSON format in request body", http.StatusBadRequest)
@@ -144,15 +115,13 @@ func (s *Server) LoginHandler() http.Handler {
 			return
 		}
 
-		var token OAuthToken
+		var token models.OAuthToken
 		err = json.NewDecoder(res.Body).Decode(&token)
 		if err != nil {
 			slog.Error("failed to decode OAuth token response", "error", err)
 			writeError(w, "Invalid response format from OAuth service", http.StatusInternalServerError)
 			return
 		}
-
-		// save token in db for later use
 
 		reqUser, err := http.NewRequest("GET", "https://api.pathofexile.com/profile", nil)
 		if err != nil {
@@ -189,14 +158,14 @@ func (s *Server) LoginHandler() http.Handler {
 			return
 		}
 
-		var user User
+		var user models.User
 		if err = json.NewDecoder(resUser.Body).Decode(&user); err != nil {
 			writeError(w, "Failed to decode user", http.StatusInternalServerError)
 			return
 		}
 
 		now := time.Now()
-		claims := JWTClaims{
+		claims := models.JWTClaims{
 			UserID:   user.UUID,
 			UserName: user.Name,
 			RegisteredClaims: jwt.RegisteredClaims{
@@ -214,6 +183,12 @@ func (s *Server) LoginHandler() http.Handler {
 		if err != nil {
 			slog.Error("failed to sign JWT token", "error", err, "user_uuid", user.UUID)
 			writeError(w, "Internal server error: failed to create authentication token", http.StatusInternalServerError)
+			return
+		}
+
+		if err = s.db.SaveToken(user.UUID, token); err != nil {
+			slog.Error("failed to save token", "error", err)
+			writeError(w, "Failed to save token", http.StatusInternalServerError)
 			return
 		}
 
