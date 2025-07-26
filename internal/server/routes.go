@@ -211,7 +211,7 @@ func (s *Server) LoginHandler() http.Handler {
 			Name:     "jwt_token",
 			Value:    signedToken,
 			HttpOnly: true,
-			SameSite: http.SameSiteLaxMode,
+			SameSite: http.SameSiteNoneMode,
 			MaxAge:   86400,
 			Path:     "/",
 		})
