@@ -211,7 +211,9 @@ func (s *Server) LoginHandler() http.Handler {
 			Name:     "jwt_token",
 			Value:    signedToken,
 			HttpOnly: true,
-			SameSite: http.SameSiteNoneMode,
+			SameSite: http.SameSiteLaxMode,
+			Domain:   ".exile-profit.com",
+			Secure:   true,
 			MaxAge:   86400,
 			Path:     "/",
 		})
