@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -18,8 +19,17 @@ func (s *Server) RegisterRoutes() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.Handle("POST /auth/poe/exchange", s.LoginHandler())
+	mux.Handle("GET /info", s.Info())
 
 	return mux
+}
+
+func (s *Server) Info() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, _ := r.Cookie("jwt_token")
+
+		fmt.Fprintf(w, c.Value)
+	})
 }
 
 func writeError(w http.ResponseWriter, message string, code int) {
