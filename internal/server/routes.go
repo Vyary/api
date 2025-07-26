@@ -2,7 +2,6 @@ package server
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -26,9 +25,15 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 func (s *Server) Info() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c, _ := r.Cookie("jwt_token")
+		c, err := r.Cookie("jwt_token")
+		if err != nil {
+			writeError(w, "no cookie", http.StatusBadRequest)
+			return
+		}
 
-		fmt.Fprintf(w, c.Value)
+		if err = json.NewEncoder(w).Encode(c.Value); err != nil {
+			slog.Error("failed to encode success response", "error", err)
+		}
 	})
 }
 
