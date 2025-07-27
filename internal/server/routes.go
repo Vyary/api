@@ -208,20 +208,10 @@ func (s *Server) LoginHandler() http.Handler {
 			return
 		}
 
-		http.SetCookie(w, &http.Cookie{
-			Name:     "jwt_token",
-			Value:    signedToken,
-			HttpOnly: true,
-			SameSite: http.SameSiteNoneMode,
-			Secure:   true,
-			MaxAge:   86400,
-			Path:     "/",
-		})
-
 		w.Header().Set("Content-Type", "application/json")
 		response := map[string]any{
-			"success": true,
-			"user":    user.Name,
+			"user":  user.Name,
+			"token": signedToken,
 		}
 
 		if err = json.NewEncoder(w).Encode(response); err != nil {

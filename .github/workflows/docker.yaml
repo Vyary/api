@@ -39,6 +39,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Create docker-stack.yaml from secret
+        run: |
+          echo "${{ secrets.DOCKER_STACK_YAML }}" > docker-stack.yaml
+
       - name: Setup SSH and Docker Context
         run: |
           echo "${{ secrets.DOCKER_HOST_SSH_KEY }}" | tr -d '\r' > /tmp/ssh_key
