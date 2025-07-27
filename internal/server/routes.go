@@ -25,14 +25,15 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 func (s *Server) Info() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c, err := r.Cookie("jwt_token")
-		if err != nil {
-			writeError(w, "no cookie", http.StatusBadRequest)
-			return
+		cookies := r.Cookies()
+
+		all := make(map[string]string)
+		for _, c := range cookies {
+			all[c.Name] = c.Value
 		}
 
-		if err = json.NewEncoder(w).Encode(c.Value); err != nil {
-			slog.Error("failed to encode success response", "error", err)
+		if err := json.NewEncoder(w).Encode(all); err != nil {
+			slog.Error("failed to encode cookies", "error", err)
 		}
 	})
 }
