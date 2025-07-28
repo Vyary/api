@@ -49,7 +49,7 @@ func (s *Server) SetCookie() http.Handler {
 			HttpOnly: true,
 			Secure:   true, // Set to false if not using HTTPS
 			Path:     "/",
-			SameSite: http.SameSiteLaxMode,
+			SameSite: http.SameSiteNoneMode,
 		}
 
 		http.SetCookie(w, &cookie)
