@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -19,6 +20,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	mux.Handle("POST /auth/poe/exchange", s.LoginHandler())
 	mux.Handle("GET /info", s.Info())
+	mux.Handle("GET /set", s.SetCookie())
 
 	return mux
 }
@@ -35,6 +37,25 @@ func (s *Server) Info() http.Handler {
 		if err := json.NewEncoder(w).Encode(all); err != nil {
 			slog.Error("failed to encode cookies", "error", err)
 		}
+	})
+}
+
+func (s *Server) SetCookie() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cookie := http.Cookie{
+			Name:     "session_token",                         // The name of the cookie.
+			Value:    "a_very_secret_and_secure_token_string", // The value. This would typically be a session ID or JWT.
+			Expires:  time.Now().Add(24 * time.Hour),
+			HttpOnly: true,
+			Secure:   true, // Set to false if not using HTTPS
+			Path:     "/",
+			SameSite: http.SameSiteLaxMode,
+		}
+
+		http.SetCookie(w, &cookie)
+
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintln(w, "Cookie has been set successfully!")
 	})
 }
 
