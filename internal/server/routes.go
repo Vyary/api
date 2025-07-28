@@ -208,16 +208,17 @@ func (s *Server) LoginHandler() http.Handler {
 			return
 		}
 
-		http.SetCookie(w, &http.Cookie{
+		cookie := http.Cookie{
 			Name:     "jwt_token",
 			Value:    signedToken,
-			HttpOnly: true,
-			SameSite: http.SameSiteNoneMode,
-			Domain:   "api.exile-profit.com",
-			Secure:   true,
-			MaxAge:   86400,
 			Path:     "/",
-		})
+			MaxAge:   3600,
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteLaxMode,
+		}
+
+		http.SetCookie(w, &cookie)
 
 		w.Header().Set("Content-Type", "application/json")
 		response := map[string]any{
