@@ -57,8 +57,6 @@ jobs:
           docker context create remote --docker "host=ssh://${{ secrets.DOCKER_USER }}@${{ secrets.DOCKER_HOST }}"
           docker context use remote
 
-      - name: Deploy Docker Stack
-        run: |
           docker stack deploy -c docker-stack.yaml ${{ secrets.STACK_NAME }}
 
       - name: Cleanup

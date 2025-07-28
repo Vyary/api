@@ -44,7 +44,7 @@ func New() Service {
 }
 
 func (s *service) SaveToken(id string, token models.OAuthToken) error {
-	query := `INSERT INTO tokens (id, access_token, expires_in, token_type, scope, sub, username) VALUES (?, ?, ?, ?, ?, ?, ?)`
+	query := `INSERT OR IGNORE INTO tokens (id, access_token, expires_in, token_type, scope, sub, username) VALUES (?, ?, ?, ?, ?, ?, ?)`
 
 	_, err := s.db.Exec(query, id, token.AccessToken, token.ExpiresIn, token.TokenType, token.Scope, token.Sub, token.Username)
 	if err != nil {
