@@ -215,6 +215,7 @@ func (s *Server) LoginHandler() http.Handler {
 			MaxAge:   3600,
 			HttpOnly: true,
 			Secure:   true,
+			Domain:   ".exile-profit.com",
 			SameSite: http.SameSiteLaxMode,
 		}
 
