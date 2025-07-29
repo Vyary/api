@@ -209,7 +209,7 @@ func (s *Server) TokenRefreshHandler() http.Handler {
 			return
 		}
 
-		if !s.db.IsRefreshTokenValid(claims.UserID) {
+		if !s.db.IsRefreshTokenValid(claims.TokenID) {
 			writeError(w, "Refresh token revoked", http.StatusUnauthorized)
 			return
 		}
