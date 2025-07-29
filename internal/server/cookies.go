@@ -51,7 +51,7 @@ func clearJWTCookies(w http.ResponseWriter) {
 	jwtRefreshCookie := http.Cookie{
 		Name:     "jwt_refresh",
 		Value:    "",
-		Path:     "/",
+		Path:     "/auth/poe/refresh",
 		MaxAge:   -1,
 		Secure:   true,
 		HttpOnly: true,

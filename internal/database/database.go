@@ -16,7 +16,7 @@ type Service interface {
 	RemoveOAuthToken(id string) error
 
 	StoreRefreshToken(userID string, tokenID string, expiration time.Duration) error
-	IsRefreshTokenValid(userID string, tokenID string) bool
+	IsRefreshTokenValid(tokenID string) bool
 	RevokeRefreshToken(userID string, tokenID string) error
 	RevokeAllRefreshTokens(userID string) error
 }
@@ -85,12 +85,18 @@ func (s *service) StoreRefreshToken(userID string, tokenID string, expiration ti
 	return nil
 }
 
-func (s *service) IsRefreshTokenValid(userID string, tokenID string) bool {
-	query := `SELECT expires_at FROM refresh_tokens WHERE user_id = ? AND token_id = ?`
+func (s *service) IsRefreshTokenValid(tokenID string) bool {
+	query := `SELECT expires_at FROM refresh_tokens WHERE token_id = ?`
 
 	var expiresAt time.Time
-	err := s.db.QueryRow(query, userID, tokenID).Scan(&expiresAt)
+
+	err := s.db.QueryRow(query, tokenID).Scan(&expiresAt)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			slog.Warn("refresh token not found", "token_id", tokenID)
+		} else {
+			slog.Error("failed to find refresh token", "error", err, "token_id", tokenID)
+		}
 		return false
 	}
 
