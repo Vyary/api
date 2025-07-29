@@ -59,9 +59,18 @@ jobs:
 
           docker stack deploy -c docker-stack.yaml ${{ secrets.STACK_NAME }}
 
+      - name: Cleanup
+        if: always()
+        run: |
           rm -f /tmp/ssh_key
           rm -f docker-stack.yaml
+
+          docker context use default || true
           docker context rm remote || true
+
+          if [ ! -z "$SSH_AGENT_PID" ]; then
+            kill $SSH_AGENT_PID || true
+          fi
 
   build_amd64:
     name: Build & Push amd64

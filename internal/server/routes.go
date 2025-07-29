@@ -214,7 +214,7 @@ func (s *Server) TokenRefreshHandler() http.Handler {
 			return
 		}
 
-		if err = s.db.RevokeToken(claims.UserID, claims.TokenID); err != nil {
+		if err = s.db.RevokeRefreshToken(claims.UserID, claims.TokenID); err != nil {
 			slog.Error("failed to revoke token", "user_id", claims.UserID, "token_id", claims.TokenID)
 		}
 
