@@ -5,13 +5,19 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/Vyary/api/internal/models"
 	_ "github.com/tursodatabase/libsql-client-go/libsql"
 )
 
-type Service interface{
-	SaveToken(id string, token models.OAuthToken) error
+type Service interface {
+	StoreOAuthToken(id string, token models.OAuthToken) error
+	RemoveOAuthToken(id string) error
+
+	StoreRefreshToken(userID string, tokenID string, expiration time.Duration) error
+	IsRefreshTokenValid(userID string, tokenID string) bool
+	RevokeToken(userID string, tokenID string) error
 }
 
 type service struct {
@@ -43,12 +49,74 @@ func New() Service {
 	return &service{db: db}
 }
 
-func (s *service) SaveToken(id string, token models.OAuthToken) error {
-	query := `INSERT OR IGNORE INTO tokens (id, access_token, expires_in, token_type, scope, sub, username) VALUES (?, ?, ?, ?, ?, ?, ?)`
+func (s *service) StoreOAuthToken(id string, token models.OAuthToken) error {
+	query := `INSERT OR REPLACE INTO tokens (user_id, username, access_token, expires_in, token_type, scope, sub) VALUES (?, ?, ?, ?, ?, ?, ?)`
 
-	_, err := s.db.Exec(query, id, token.AccessToken, token.ExpiresIn, token.TokenType, token.Scope, token.Sub, token.Username)
+	_, err := s.db.Exec(query, id, token.Username, token.AccessToken, token.ExpiresIn, token.TokenType, token.Scope, token.Sub)
 	if err != nil {
-		return fmt.Errorf("Failed to save token: "+err.Error())
+		return fmt.Errorf("failed to store OAuth token to db: %w", err)
+	}
+
+	return nil
+}
+
+func (s *service) RemoveOAuthToken(id string) error {
+	query := `DELETE FROM tokens WHERE id = ?`
+
+	_, err := s.db.Exec(query, id)
+	if err != nil {
+		return fmt.Errorf("failed to remove OAuth token: %w", err)
+	}
+
+	return nil
+}
+
+func (s *service) StoreRefreshToken(userID string, tokenID string, expiration time.Duration) error {
+	query := `INSERT INTO refresh_tokens (user_id, token_id, expires_at) VALUES (?, ?, ?)`
+
+	expiresAt := time.Now().Add(expiration)
+
+	_, err := s.db.Exec(query, userID, tokenID, expiresAt)
+	if err != nil {
+		return fmt.Errorf("failed to store refresh token: %w", err)
+	}
+
+	return nil
+}
+
+func (s *service) IsRefreshTokenValid(userID string, tokenID string) bool {
+	query := `SELECT expires_at FROM refresh_tokens WHERE user_id = ? AND token_id = ?`
+
+	var expiresAt time.Time
+	err := s.db.QueryRow(query, userID, tokenID).Scan(&expiresAt)
+	if err != nil {
+		return false
+	}
+
+	if time.Now().After(expiresAt) {
+		return false
+	}
+
+	return true
+}
+
+func (s *service) RevokeToken(userID string, tokenID string) error {
+	query := `DELETE FROM refresh_tokens WHERE user_id = ? AND token_id = ?`
+
+	_, err := s.db.Exec(query, userID, tokenID)
+	if err != nil {
+		return fmt.Errorf("failed to revoke refresh token: %w", err)
+	}
+
+	return nil
+}
+
+func (s *service) CleanupRefreshTokens() error {
+	query := `DELETE FROM refresh_tokens WHERE expires_at < ?`
+
+	_, err := s.db.Exec(query, time.Now())
+	if err != nil {
+		return fmt.Errorf("failed to cleanup refresh tokens: %w", err)
 	}
 
 	return nil

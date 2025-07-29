@@ -2,78 +2,25 @@ package server
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/Vyary/api/internal/models"
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func (s *Server) RegisterRoutes() http.Handler {
-	mux := http.NewServeMux()
+var (
+	clientSecret string
+	jwtSecret    string
+)
 
-	mux.Handle("POST /auth/poe/exchange", s.LoginHandler())
-	mux.Handle("GET /info", s.Info())
-	mux.Handle("GET /set", s.SetCookie())
-
-	return mux
-}
-
-func (s *Server) Info() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cookies := r.Cookies()
-
-		all := make(map[string]string)
-		for _, c := range cookies {
-			all[c.Name] = c.Value
-		}
-
-		if err := json.NewEncoder(w).Encode(all); err != nil {
-			slog.Error("failed to encode cookies", "error", err)
-		}
-	})
-}
-
-func (s *Server) SetCookie() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cookie := http.Cookie{
-			Name:     "session_token",                         // The name of the cookie.
-			Value:    "a_very_secret_and_secure_token_string", // The value. This would typically be a session ID or JWT.
-			Expires:  time.Now().Add(24 * time.Hour),
-			HttpOnly: true,
-			Secure:   true, // Set to false if not using HTTPS
-			Path:     "/",
-			SameSite: http.SameSiteNoneMode,
-		}
-
-		http.SetCookie(w, &cookie)
-
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, "Cookie has been set successfully!")
-	})
-}
-
-func writeError(w http.ResponseWriter, message string, code int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-
-	response := models.ErrorResponse{
-		Error: message,
-		Code:  code,
-	}
-
-	json.NewEncoder(w).Encode(response)
-}
-
-func (s *Server) LoginHandler() http.Handler {
-	clientSecret := os.Getenv("CLIENT_SECRET")
-	jwtSecret := os.Getenv("JWT_SECRET")
+func init() {
+	clientSecret = os.Getenv("CLIENT_SECRET")
+	jwtSecret = os.Getenv("JWT_SECRET")
 
 	if clientSecret == "" {
 		slog.Error("CLIENT_SECRET environment variable is required")
@@ -83,7 +30,20 @@ func (s *Server) LoginHandler() http.Handler {
 		slog.Error("JWT_SECRET environment variable is required")
 		os.Exit(1)
 	}
+}
 
+func (s *Server) RegisterRoutes() http.Handler {
+	mux := http.NewServeMux()
+
+	mux.Handle("POST /auth/poe/exchange", s.ExchangeHandler())
+	mux.Handle("POST /auth/poe/refresh", s.TokenRefreshHandler())
+	mux.Handle("POST /auth/poe/logout", s.LogoutHandler())
+	mux.Handle("POST /auth/poe/logout-all", s.LogoutAllHandler())
+
+	return mux
+}
+
+func (s *Server) ExchangeHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Content-Type") != "application/json" {
 			slog.Warn("invalid content type", "content_type", r.Header.Get("Content-Type"), "expected", "application/json")
@@ -201,46 +161,20 @@ func (s *Server) LoginHandler() http.Handler {
 			return
 		}
 
-		now := time.Now()
-		claims := models.JWTClaims{
-			UserID:   user.UUID,
-			UserName: user.Name,
-			RegisteredClaims: jwt.RegisteredClaims{
-				ExpiresAt: jwt.NewNumericDate(now.Add(24 * time.Hour)),
-				IssuedAt:  jwt.NewNumericDate(now),
-				NotBefore: jwt.NewNumericDate(now),
-				Issuer:    "exile-profit",
-				Subject:   user.UUID,
-			},
-		}
-
-		jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-
-		signedToken, err := jwtToken.SignedString([]byte(jwtSecret))
+		tokenPair, err := s.GenTokenPair(user)
 		if err != nil {
-			slog.Error("failed to sign JWT token", "error", err, "user_uuid", user.UUID)
-			writeError(w, "Internal server error: failed to create authentication token", http.StatusInternalServerError)
+			slog.Error("failed to gen JWT tokens", "error", err, "user_uuid", user.UUID)
+			writeError(w, "Failed to create authentication token", http.StatusInternalServerError)
 			return
 		}
 
-		if err = s.db.SaveToken(user.UUID, token); err != nil {
+		if err = s.db.StoreOAuthToken(user.UUID, token); err != nil {
 			slog.Error("failed to save token", "error", err)
 			writeError(w, "Failed to save token", http.StatusInternalServerError)
 			return
 		}
 
-		cookie := http.Cookie{
-			Name:     "jwt_token",
-			Value:    signedToken,
-			Path:     "/",
-			MaxAge:   3600,
-			HttpOnly: true,
-			Secure:   true,
-			Domain:   ".exile-profit.com",
-			SameSite: http.SameSiteLaxMode,
-		}
-
-		http.SetCookie(w, &cookie)
+		setJWTCookies(w, *tokenPair)
 
 		w.Header().Set("Content-Type", "application/json")
 		response := map[string]any{
@@ -250,5 +184,116 @@ func (s *Server) LoginHandler() http.Handler {
 		if err = json.NewEncoder(w).Encode(response); err != nil {
 			slog.Error("failed to encode success response", "error", err)
 		}
+	})
+}
+
+func (s *Server) TokenRefreshHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokenCookie, err := r.Cookie("jwt_refresh")
+		if err != nil {
+			writeError(w, "Refresh token not found", http.StatusUnauthorized)
+			return
+		}
+
+		token, err := jwt.ParseWithClaims(tokenCookie.Value, models.JWTClaims{}, func(t *jwt.Token) (any, error) {
+			return []byte(jwtSecret), nil
+		})
+		if err != nil || !token.Valid {
+			writeError(w, "Invalid refresh token", http.StatusUnauthorized)
+			return
+		}
+
+		claims, ok := token.Claims.(*models.JWTClaims)
+		if !ok {
+			writeError(w, "Invalid refresh token claims", http.StatusUnauthorized)
+			return
+		}
+
+		if !s.db.IsRefreshTokenValid(claims.UserID, claims.TokenID) {
+			writeError(w, "Refresh token revoked", http.StatusUnauthorized)
+			return
+		}
+
+		if err = s.db.RevokeToken(claims.UserID, claims.TokenID); err != nil {
+			slog.Error("failed to revoke token", "user_id", claims.UserID, "token_id", claims.TokenID)
+		}
+
+		tokenPair, err := s.GenTokenPair(models.User{UUID: claims.UserID, Name: claims.UserName})
+		if err != nil {
+			slog.Error("failed to gen JWT tokens", "error", err, "user_uuid", claims.UserID)
+			writeError(w, "Failed to create authentication token", http.StatusInternalServerError)
+			return
+		}
+
+		setJWTCookies(w, *tokenPair)
+
+		w.WriteHeader(http.StatusOK)
+	})
+}
+
+func (s *Server) LogoutHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokenCookie, err := r.Cookie("jwt_token")
+		if err != nil {
+			writeError(w, "JWT cookie not found", http.StatusUnauthorized)
+			return
+		}
+
+		token, err := jwt.ParseWithClaims(tokenCookie.Value, models.JWTClaims{}, func(t *jwt.Token) (any, error) {
+			return []byte(jwtSecret), nil
+		})
+		if err != nil || !token.Valid {
+			writeError(w, "Invalid jwt token", http.StatusUnauthorized)
+			return
+		}
+
+		claims, ok := token.Claims.(*models.JWTClaims)
+		if !ok {
+			writeError(w, "Invalid token claims", http.StatusUnauthorized)
+			return
+		}
+
+		if err := s.db.RevokeToken(claims.UserID, claims.TokenID); err != nil {
+			slog.Error("failed to revoke refresh token", "user_id", claims.UserID, "token_id", claims.TokenID)
+		}
+
+		clearJWTCookies(w)
+
+		w.WriteHeader(http.StatusOK)
+	})
+}
+
+func (s *Server) LogoutAllHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokenCookie, err := r.Cookie("jwt_token")
+		if err != nil {
+			writeError(w, "JWT cookie not found", http.StatusUnauthorized)
+			return
+		}
+
+		token, err := jwt.ParseWithClaims(tokenCookie.Value, models.JWTClaims{}, func(t *jwt.Token) (any, error) {
+			return []byte(jwtSecret), nil
+		})
+		if err != nil || !token.Valid {
+			writeError(w, "Invalid jwt token", http.StatusUnauthorized)
+			return
+		}
+
+		claims, ok := token.Claims.(*models.JWTClaims)
+		if !ok {
+			writeError(w, "Invalid token claims", http.StatusUnauthorized)
+			return
+		}
+
+		if err := s.db.RemoveOAuthToken(claims.UserID); err != nil {
+			slog.Error("failed to remove OAuth token", "user_id", claims.UserID)
+		}
+		if err := s.db.RevokeToken(claims.UserID, claims.TokenID); err != nil {
+			slog.Error("failed to revoke refresh token", "user_id", claims.UserID, "token_id", claims.TokenID)
+		}
+
+		clearJWTCookies(w)
+
+		w.WriteHeader(http.StatusOK)
 	})
 }

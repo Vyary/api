@@ -1,6 +1,8 @@
 package models
 
-import "github.com/golang-jwt/jwt/v5"
+import (
+	"github.com/golang-jwt/jwt/v5"
+)
 
 type OAuthCode struct {
 	Code     string `json:"code"`
@@ -8,12 +10,12 @@ type OAuthCode struct {
 }
 
 type OAuthToken struct {
+	Username    string `json:"username"`
 	AccessToken string `json:"access_token"`
 	ExpiresIn   int    `json:"expires_in"`
 	TokenType   string `json:"token_type"`
 	Scope       string `json:"scope"`
 	Sub         string `json:"sub"`
-	Username    string `json:"username"`
 }
 
 type User struct {
@@ -24,10 +26,16 @@ type User struct {
 type JWTClaims struct {
 	UserID   string
 	UserName string
+	TokenID  string
 	jwt.RegisteredClaims
 }
 
 type ErrorResponse struct {
 	Error string
 	Code  int
+}
+
+type TokenPair struct {
+	JWT        string
+	JWTRefresh string
 }

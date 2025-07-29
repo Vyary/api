@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Vyary/api/internal/database"
+	"github.com/Vyary/api/internal/models"
 )
 
 type Server struct {
@@ -26,7 +28,6 @@ func New() *http.Server {
 		port: port,
 		db:   database.New(),
 	}
-	
 
 	return &http.Server{
 		Addr:              fmt.Sprintf(":%s", srv.port),
@@ -37,4 +38,16 @@ func New() *http.Server {
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    1 << 20,
 	}
+}
+
+func writeError(w http.ResponseWriter, message string, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+
+	response := models.ErrorResponse{
+		Error: message,
+		Code:  code,
+	}
+
+	json.NewEncoder(w).Encode(response)
 }
