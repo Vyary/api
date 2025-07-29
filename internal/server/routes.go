@@ -253,7 +253,7 @@ func (s *Server) LogoutHandler() http.Handler {
 			return
 		}
 
-		if err := s.db.RevokeToken(claims.UserID, claims.TokenID); err != nil {
+		if err := s.db.RevokeRefreshToken(claims.UserID, claims.TokenID); err != nil {
 			slog.Error("failed to revoke refresh token", "user_id", claims.UserID, "token_id", claims.TokenID)
 		}
 
@@ -288,7 +288,7 @@ func (s *Server) LogoutAllHandler() http.Handler {
 		if err := s.db.RemoveOAuthToken(claims.UserID); err != nil {
 			slog.Error("failed to remove OAuth token", "user_id", claims.UserID)
 		}
-		if err := s.db.RevokeToken(claims.UserID, claims.TokenID); err != nil {
+		if err := s.db.RevokeAllRefreshTokens(claims.UserID); err != nil {
 			slog.Error("failed to revoke refresh token", "user_id", claims.UserID, "token_id", claims.TokenID)
 		}
 

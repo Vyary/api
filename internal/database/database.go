@@ -17,7 +17,8 @@ type Service interface {
 
 	StoreRefreshToken(userID string, tokenID string, expiration time.Duration) error
 	IsRefreshTokenValid(userID string, tokenID string) bool
-	RevokeToken(userID string, tokenID string) error
+	RevokeRefreshToken(userID string, tokenID string) error
+	RevokeAllRefreshTokens(userID string) error
 }
 
 type service struct {
@@ -61,7 +62,7 @@ func (s *service) StoreOAuthToken(id string, token models.OAuthToken) error {
 }
 
 func (s *service) RemoveOAuthToken(id string) error {
-	query := `DELETE FROM tokens WHERE id = ?`
+	query := `DELETE FROM tokens WHERE user_id = ?`
 
 	_, err := s.db.Exec(query, id)
 	if err != nil {
@@ -100,10 +101,21 @@ func (s *service) IsRefreshTokenValid(userID string, tokenID string) bool {
 	return true
 }
 
-func (s *service) RevokeToken(userID string, tokenID string) error {
+func (s *service) RevokeRefreshToken(userID string, tokenID string) error {
 	query := `DELETE FROM refresh_tokens WHERE user_id = ? AND token_id = ?`
 
 	_, err := s.db.Exec(query, userID, tokenID)
+	if err != nil {
+		return fmt.Errorf("failed to revoke refresh token: %w", err)
+	}
+
+	return nil
+}
+
+func (s *service) RevokeAllRefreshTokens(userID string) error {
+	query := `DELETE FROM refresh_tokens WHERE user_id = ?`
+
+	_, err := s.db.Exec(query, userID)
 	if err != nil {
 		return fmt.Errorf("failed to revoke refresh token: %w", err)
 	}
