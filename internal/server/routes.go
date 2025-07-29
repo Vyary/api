@@ -195,7 +195,7 @@ func (s *Server) TokenRefreshHandler() http.Handler {
 			return
 		}
 
-		token, err := jwt.ParseWithClaims(tokenCookie.Value, models.JWTClaims{}, func(t *jwt.Token) (any, error) {
+		token, err := jwt.ParseWithClaims(tokenCookie.Value, &models.JWTClaims{}, func(t *jwt.Token) (any, error) {
 			return []byte(jwtSecret), nil
 		})
 		if err != nil || !token.Valid {
@@ -239,7 +239,7 @@ func (s *Server) LogoutHandler() http.Handler {
 			return
 		}
 
-		token, err := jwt.ParseWithClaims(tokenCookie.Value, models.JWTClaims{}, func(t *jwt.Token) (any, error) {
+		token, err := jwt.ParseWithClaims(tokenCookie.Value, &models.JWTClaims{}, func(t *jwt.Token) (any, error) {
 			return []byte(jwtSecret), nil
 		})
 		if err != nil || !token.Valid {
@@ -271,7 +271,7 @@ func (s *Server) LogoutAllHandler() http.Handler {
 			return
 		}
 
-		token, err := jwt.ParseWithClaims(tokenCookie.Value, models.JWTClaims{}, func(t *jwt.Token) (any, error) {
+		token, err := jwt.ParseWithClaims(tokenCookie.Value, &models.JWTClaims{}, func(t *jwt.Token) (any, error) {
 			return []byte(jwtSecret), nil
 		})
 		if err != nil || !token.Valid {
