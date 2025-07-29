@@ -77,7 +77,7 @@ func (s *service) StoreRefreshToken(userID string, tokenID string, expiration ti
 
 	expiresAt := time.Now().Add(expiration)
 
-	_, err := s.db.Exec(query, userID, tokenID, expiresAt)
+	_, err := s.db.Exec(query, userID, tokenID, expiresAt.Unix())
 	if err != nil {
 		return fmt.Errorf("failed to store refresh token: %w", err)
 	}
@@ -86,25 +86,16 @@ func (s *service) StoreRefreshToken(userID string, tokenID string, expiration ti
 }
 
 func (s *service) IsRefreshTokenValid(tokenID string) bool {
-	query := `SELECT expires_at FROM refresh_tokens WHERE token_id = ?`
+	query := `SELECT COUNT(*) FROM refresh_tokens WHERE token_id = ? AND expires_at > ?`
 
-	var expiresAt time.Time
+	var count int
 
-	err := s.db.QueryRow(query, tokenID).Scan(&expiresAt)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			slog.Warn("refresh token not found", "token_id", tokenID)
-		} else {
-			slog.Error("failed to find refresh token", "error", err, "token_id", tokenID)
-		}
+	if err := s.db.QueryRow(query, tokenID, time.Now().Unix()).Scan(&count); err != nil {
+		slog.Error("failed to validate refresh token", "error", err, "token_id", tokenID)
 		return false
 	}
 
-	if time.Now().After(expiresAt) {
-		return false
-	}
-
-	return true
+	return count > 0
 }
 
 func (s *service) RevokeRefreshToken(userID string, tokenID string) error {
