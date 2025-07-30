@@ -35,12 +35,46 @@ func init() {
 func (s *Server) RegisterRoutes() http.Handler {
 	mux := http.NewServeMux()
 
+	mux.Handle("GET /info", s.InfoHandler())
 	mux.Handle("POST /auth/poe/exchange", s.ExchangeHandler())
 	mux.Handle("POST /auth/poe/refresh", s.TokenRefreshHandler())
 	mux.Handle("POST /auth/poe/logout", s.LogoutHandler())
 	mux.Handle("POST /auth/poe/logout-all", s.LogoutAllHandler())
 
 	return mux
+}
+
+func (s *Server) InfoHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokenCookie, err := r.Cookie("jwt_token")
+		if err != nil {
+			writeError(w, "JWT cookie not found", http.StatusUnauthorized)
+			return
+		}
+
+		token, err := jwt.ParseWithClaims(tokenCookie.Value, &models.JWTClaims{}, func(t *jwt.Token) (any, error) {
+			return []byte(jwtSecret), nil
+		})
+		if err != nil || !token.Valid {
+			writeError(w, "Invalid jwt token", http.StatusUnauthorized)
+			return
+		}
+
+		claims, ok := token.Claims.(*models.JWTClaims)
+		if !ok {
+			writeError(w, "Invalid token claims", http.StatusUnauthorized)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		response := map[string]any{
+			"user": claims.UserName,
+		}
+
+		if err = json.NewEncoder(w).Encode(response); err != nil {
+			slog.Error("failed to encode success response", "error", err)
+		}
+	})
 }
 
 func (s *Server) ExchangeHandler() http.Handler {
