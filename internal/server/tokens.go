@@ -13,7 +13,7 @@ func (s *Server) GenTokenPair(user models.User) (*models.TokenPair, error) {
 	tokenID := uuid.New().String()
 
 	jwtClaims := models.JWTClaims{
-		UserID:   user.UUID,
+		UserID:   user.ID,
 		UserName: user.Name,
 		TokenID:  tokenID,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -21,7 +21,7 @@ func (s *Server) GenTokenPair(user models.User) (*models.TokenPair, error) {
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
 			Issuer:    "exile-profit",
-			Subject:   user.UUID,
+			Subject:   user.ID,
 		},
 	}
 
@@ -33,7 +33,7 @@ func (s *Server) GenTokenPair(user models.User) (*models.TokenPair, error) {
 	}
 
 	jwtRefreshClaim := models.JWTClaims{
-		UserID:   user.UUID,
+		UserID:   user.ID,
 		UserName: user.Name,
 		TokenID:  tokenID,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -41,7 +41,7 @@ func (s *Server) GenTokenPair(user models.User) (*models.TokenPair, error) {
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
 			Issuer:    "exile-profit",
-			Subject:   user.UUID,
+			Subject:   user.ID,
 		},
 	}
 
@@ -52,7 +52,7 @@ func (s *Server) GenTokenPair(user models.User) (*models.TokenPair, error) {
 		return nil, err
 	}
 
-	if err := s.db.StoreRefreshToken(user.UUID, tokenID, jwtRefreshExpiration); err != nil {
+	if err := s.db.StoreRefreshToken(user.ID, tokenID, jwtRefreshExpiration); err != nil {
 		return nil, err
 	}
 

@@ -1,3 +1,4 @@
+// Package server provides HTTP server setup, routing, and error handling
 package server
 
 import (
@@ -10,6 +11,7 @@ import (
 
 	"github.com/Vyary/api/internal/database"
 	"github.com/Vyary/api/internal/models"
+	_ "github.com/joho/godotenv/autoload"
 )
 
 type Server struct {

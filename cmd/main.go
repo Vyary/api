@@ -14,14 +14,9 @@ import (
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 )
 
-var (
-	service = os.Getenv("SERVICE_NAME")
-	logger  = otelslog.NewLogger(service)
-)
-
 func main() {
 	if err := run(); err != nil {
-		slog.Error("failed to start service", "error", err, "service", service)
+		slog.Error("failed to start service", "error", err)
 		os.Exit(1)
 	}
 }
@@ -30,13 +25,21 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	otelShutdown, err := telemetry.SetupOTelSDK(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to setup Otel SDK: ", err)
-	}
-	defer otelShutdown(context.Background())
+	var err error
 
-	slog.SetDefault(logger)
+	if os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != "" {
+
+		service := os.Getenv("SERVICE_NAME")
+		logger := otelslog.NewLogger(service)
+
+		otelShutdown, err := telemetry.SetupOTelSDK(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to setup Otel SDK: ", err)
+		}
+		defer otelShutdown(context.Background())
+
+		slog.SetDefault(logger)
+	}
 
 	srv := server.New()
 

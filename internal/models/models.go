@@ -1,3 +1,4 @@
+// Package models defines data types used across the API service
 package models
 
 import (
@@ -19,7 +20,7 @@ type OAuthToken struct {
 }
 
 type User struct {
-	UUID string `json:"uuid"`
+	ID   string `json:"id"`
 	Name string `json:"name"`
 }
 
@@ -38,4 +39,41 @@ type ErrorResponse struct {
 type TokenPair struct {
 	JWT        string
 	JWTRefresh string
+}
+
+type Item struct {
+	ID        int     `json:"id"`
+	Icon      string  `json:"icon"`
+	Name      string  `json:"name"`
+	Base      string  `json:"base"`
+	Category  string  `json:"category"`
+	Value     float32 `json:"value"`
+	Currency  string  `json:"currency"`
+	Listed    int     `json:"listed"`
+	UserID    string  `json:"user_id"`
+	CreatedAt int64   `json:"created_at"`
+	UpdatedAt int64   `json:"updated_at"`
+}
+
+type Strategy struct {
+	ID          int    `json:"id"`
+	UserID      string `json:"user_id"`
+	CreatedBy   string `json:"created_by"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Atlas       string `json:"atlas"`
+	Public      bool   `json:"public"`
+	Featured    bool   `json:"featured"`
+	CreatedAt   int64  `json:"created_at"`
+	UpdatedAt   int64  `json:"updated_at"`
+}
+
+type StrategyItem struct {
+	ID         int     `json:"id"`
+	StratID    int     `json:"strat_id"`
+	ItemID     int     `json:"item_id"`
+	Amount     int     `json:"amount"`
+	Role       string  `json:"role"`
+	DropChance float32 `json:"drop_chance"`
+	Pair       int     `json:"pair"`
 }
