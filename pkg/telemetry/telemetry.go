@@ -1,3 +1,7 @@
+// Package telemetry provides a single entrypoint for bootstrapping
+// OpenTelemetry in a Go service. It wires up tracing, metrics, and
+// structured logging with OTLP/gRPC exporters, and configures the global
+// propagator, tracer, meter, and logger providers.
 package telemetry
 
 import (
@@ -26,7 +30,7 @@ var (
 	service  string
 )
 
-// setupOTelSDK bootstraps the OpenTelemetry pipeline.
+// SetupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
 func SetupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, err error) {
 	endpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")

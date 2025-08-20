@@ -6,79 +6,65 @@ import (
 	"net/http"
 
 	"github.com/Vyary/api/internal/models"
-	_ "github.com/joho/godotenv/autoload"
 )
 
 func (s *Server) RegisterRoutes() http.Handler {
 	mux := http.NewServeMux()
 
-	mux.Handle("GET /info", s.InfoHandler())
-	mux.Handle("POST /auth/poe/exchange", s.ExchangeHandler())
-	mux.Handle("POST /auth/poe/refresh", s.TokenRefreshHandler())
-	mux.Handle("POST /auth/poe/logout", s.LogoutHandler())
-	mux.Handle("POST /auth/poe/logout-all", s.LogoutAllHandler())
+	mux.HandleFunc("GET /info", s.InfoHandler)
 
-	mux.Handle("POST /strategies", s.CreateStrategyHandler())
-	mux.Handle("GET /strategies/{id}", s.GetStrategy())
+	mux.HandleFunc("POST /auth/poe/exchange", s.ExchangeHandler)
+	mux.HandleFunc("POST /auth/poe/refresh", s.TokenRefreshHandler)
+	mux.HandleFunc("POST /auth/poe/logout", s.LogoutHandler)
+	mux.HandleFunc("POST /auth/poe/logout-all", s.LogoutAllHandler)
+
+	mux.HandleFunc("POST /v1/strategies", s.CreateStrategyHandler)
+	// mux.HandleFunc("GET /v1/strategies", s.ListPublicStrategiesHandler)
+	// mux.HandleFunc("GET /v1/strategies/featured", s.ListFeaturedStrategiesHandler)
+
+	mux.HandleFunc("GET /v1/strategies/{strategy_id}", s.GetStrategyHandler)
+	// mux.HandleFunc("PUT /v1/strategies/{strategy_id}", s.UpdateStrategyHandler)
+	// mux.HandleFunc("DELETE /v1/strategies/{strategy_id}", s.DeleteStrategyHandler)
+
+	mux.HandleFunc("POST /v1/strategies/{strategy_id}/tables", s.CreateStrategyTableHandler)
+	// mux.HandleFunc("GET /v1/strategies/{strategy_id}/tables", s.ListStrategyTablesHandler)
+	// mux.HandleFunc("PUT /v1/strategies/{strategy_id}/tables/{table_id}", s.UpdateStrategyTableHandler)
+	// mux.HandleFunc("DELETE /v1/strategies/{strategy_id}/tables/{table_id}", s.DeleteStrategyTableHandler)
+
+	mux.HandleFunc("POST /v1/strategies/{strategy_id}/items", s.AddStrategyItemHandler)
+	// mux.HandleFunc("GET /v1/strategies/{strategy_id}/tables/{table_id}/items", s.ListStrategyItemHandler)
+	// mux.HandleFunc("PUT /v1/strategies/{strategy_id}/tables/{table_id}/items/{item_id}", s.UpdateStrategyItemHandler)
+	// mux.HandleFunc("DELETE /v1/strategies/{strategy_id}/tables/{table_id}/items/{item_id}", s.DeleteStrategyItemHandler)
 
 	return mux
 }
 
-func (s *Server) CreateStrategyHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Content-Type") != "application/json" {
-			slog.Warn("invalid content type", "content_type", r.Header.Get("Content-Type"), "expected", "application/json")
-			writeError(w, "Content-Type must be application/json", http.StatusBadRequest)
-			return
-		}
 
-		var strategy models.Strategy
-		if err := json.NewDecoder(r.Body).Decode(&strategy); err != nil {
-			slog.Error("failed to decode request body", "error", err)
-			writeError(w, "Invalid JSON format in request body", http.StatusBadRequest)
-			return
-		}
 
-		// TODO: get user from jwt
-		// TODO: validate strategy
-		u := models.User{
-			ID:   "123",
-			Name: "Vyary",
-		}
+func (s *Server) AddStrategyItemHandler(w http.ResponseWriter, r *http.Request) {
+	strategyID := r.PathValue("strategy_id")
 
-		id, err := s.db.StoreStrategy(u, strategy)
-		if err != nil {
-			slog.Error("failed to store strategy", "error", err)
-			writeError(w, "Unable to save strategy, try again later.", http.StatusInternalServerError)
-			return
-		}
+	// user, err := GetUser(r)
+	// if err != nil {
+	// 	writeError(w, http.StatusUnauthorized, err.Error())
+	// 	return
+	// }
 
-		w.Header().Set("Content-Type", "application/json")
-		response := map[string]any{
-			"strategyID": id,
-		}
+	var strategyItem models.StrategyItem
+	if err := json.NewDecoder(r.Body).Decode(&strategyItem); err != nil {
+		slog.Error("failed to decode request body", "error", err)
+		writeError(w, http.StatusBadRequest, "Invalid JSON format in request body")
+		return
+	}
 
-		if err = json.NewEncoder(w).Encode(response); err != nil {
-			slog.Error("failed to encode success response", "error", err)
-		}
-	})
-}
+	// TODO: validate strategy item
+	// TODO: check if user can add items to strategy
 
-func (s *Server) GetStrategy() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		strategyID := r.PathValue("id")
+	if err := s.db.StoreStrategyItem(strategyID, strategyItem); err != nil {
+		slog.Error("failed to store strategy item", "error", err)
+		writeError(w, http.StatusInternalServerError, "Unable to save strategy item, try again later.")
+		return
+	}
 
-		strategy, err := s.db.RetrieveStrategy(strategyID)
-		if err != nil {
-			slog.Error("failed to retrieve strategy", "error", err)
-			writeError(w, "Unable to retrieve strategy", http.StatusInternalServerError)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-
-		if err := json.NewEncoder(w).Encode(strategy); err != nil {
-			slog.Error("failed to encode response", "error", err)
-		}
-	})
+	w.WriteHeader(http.StatusOK)
 }

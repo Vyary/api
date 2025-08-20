@@ -68,12 +68,36 @@ type Strategy struct {
 	UpdatedAt   int64  `json:"updated_at"`
 }
 
+type StrategyDTO struct {
+	ID          int    `json:"id"`
+	CreatedBy   string `json:"created_by"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Atlas       string `json:"atlas"`
+	Public      bool   `json:"public"`
+	CreatedAt   int64  `json:"created_at"`
+	UpdatedAt   int64  `json:"updated_at"`
+}
+
+type StrategyTable struct {
+	ID         int    `json:"id"`
+	StrategyID int    `json:"strategy_id"`
+	Type       string `json:"type"`
+	Title      string `json:"title"`
+}
+
 type StrategyItem struct {
-	ID         int     `json:"id"`
-	StratID    int     `json:"strat_id"`
+	SID        int
+	StrategyID int     `json:"strategy_id"`
+	TableID    int     `json:"table_id"`
 	ItemID     int     `json:"item_id"`
 	Amount     int     `json:"amount"`
 	Role       string  `json:"role"`
 	DropChance float32 `json:"drop_chance"`
 	Pair       int     `json:"pair"`
+}
+
+type SItem struct {
+	Item
+	StrategyItem
 }

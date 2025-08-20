@@ -22,7 +22,10 @@ type Service interface {
 	RevokeRefreshToken(userID string, tokenID string) error
 	RevokeAllRefreshTokens(userID string) error
 
-	StoreStrategy(models.User, models.Strategy) (int, error)
+	StoreStrategy(user models.User, strategy models.Strategy) (*models.StrategyDTO, error)
+	StoreStrategyTable(strategyID string, table models.StrategyTable) (*models.StrategyTable, error)
+	StoreStrategyItem(strategyID string, item models.StrategyItem) error
+
 	RetrieveStrategy(id string) (*models.Strategy, error)
 }
 
@@ -55,144 +58,73 @@ func New() Service {
 	return &service{db: db}
 }
 
-func (s *service) StoreOAuthToken(id string, token models.OAuthToken) error {
+func (s *service) StoreStrategy(user models.User, strategy models.Strategy) (*models.StrategyDTO, error) {
 	query := `
-	INSERT INTO users
-		(id, username, access_token, expires_in, token_type, scope, sub)
-	VALUES (?, ?, ?, ?, ?, ?, ?)
-	ON CONFLICT(id) DO UPDATE SET
-		access_token = excluded.access_token,
-		expires_in = excluded.expires_in,
-		token_type = excluded.token_type,
-		scope = excluded.scope,
-		sub = excluded.sub`
+	INSERT INTO strategies (user_id, created_by, name, description, atlas, public) 
+	VALUES (?, ?, ?, ?, ?, ?) 
+	RETURNING id, created_by, name, description, atlas, public, created_at, updated_at`
 
-	_, err := s.db.Exec(query, token.AccessToken, token.ExpiresIn, token.TokenType, token.Scope, token.Sub, id)
-	if err != nil {
-		return fmt.Errorf("failed to store OAuth token to db: %w", err)
+	var strategyDTO models.StrategyDTO
+	if err := s.db.QueryRow(query, user.ID, user.Name, strategy.Name, strategy.Description, strategy.Atlas, strategy.Public).Scan(&strategyDTO.ID, &strategyDTO.CreatedBy, &strategyDTO.Name, &strategyDTO.Description, &strategyDTO.Atlas, &strategyDTO.Public, &strategyDTO.CreatedAt, &strategyDTO.UpdatedAt); err != nil {
+		return nil, fmt.Errorf("failed to create strategy: %w", err)
 	}
 
-	return nil
+	return &strategyDTO, nil
 }
 
-func (s *service) RemoveOAuthToken(id string) error {
+func (s *service) StoreStrategyTable(strategyID string, table models.StrategyTable) (*models.StrategyTable, error) {
 	query := `
-	UPDATE users 
-	SET 
-		access_token = '', 
-		expires_in = 0, 
-		token_type = '', 
-		scope = '', 
-		sub = '' 
-	WHERE id = ?`
+	INSERT INTO strategy_tables (strategy_id, type, title)
+	VALUES (?, ?, ?)
+	RETURNING id, strategy_id, type, title`
 
-	_, err := s.db.Exec(query, id)
-	if err != nil {
-		return fmt.Errorf("failed to remove OAuth token: %w", err)
+	var st models.StrategyTable
+	if err := s.db.QueryRow(query, strategyID, table.Type, table.Title).Scan(&st.ID, &st.StrategyID, &st.Type, &st.Title); err != nil {
+		return nil, fmt.Errorf("failed to create table: %w", err)
 	}
 
-	return nil
-}
-
-func (s *service) StoreRefreshToken(userID string, tokenID string, expiration time.Duration) error {
-	query := `
-	INSERT INTO refresh_tokens 
-	(user_id, token_id, expires_at) 
-	VALUES (?, ?, ?)`
-
-	expiresAt := time.Now().Add(expiration)
-
-	_, err := s.db.Exec(query, userID, tokenID, expiresAt.Unix())
-	if err != nil {
-		return fmt.Errorf("failed to store refresh token: %w", err)
-	}
-
-	return nil
-}
-
-func (s *service) IsRefreshTokenValid(tokenID string) bool {
-	query := `
-	SELECT COUNT(*) 
-	FROM refresh_tokens 
-	WHERE token_id = ? AND expires_at > ?`
-
-	var count int
-
-	if err := s.db.QueryRow(query, tokenID, time.Now().Unix()).Scan(&count); err != nil {
-		slog.Error("failed to validate refresh token", "error", err, "token_id", tokenID)
-		return false
-	}
-
-	return count > 0
-}
-
-func (s *service) RevokeRefreshToken(userID string, tokenID string) error {
-	query := `
-	DELETE FROM refresh_tokens 
-	WHERE user_id = ? AND token_id = ?`
-
-	_, err := s.db.Exec(query, userID, tokenID)
-	if err != nil {
-		return fmt.Errorf("failed to revoke refresh token: %w", err)
-	}
-
-	return nil
-}
-
-func (s *service) RevokeAllRefreshTokens(userID string) error {
-	query := `
-	DELETE FROM refresh_tokens 
-	WHERE user_id = ?`
-
-	_, err := s.db.Exec(query, userID)
-	if err != nil {
-		return fmt.Errorf("failed to revoke refresh token: %w", err)
-	}
-
-	return nil
-}
-
-func (s *service) CleanupRefreshTokens() error {
-	query := `
-	DELETE FROM refresh_tokens 
-	WHERE expires_at < ?`
-
-	_, err := s.db.Exec(query, time.Now())
-	if err != nil {
-		return fmt.Errorf("failed to cleanup refresh tokens: %w", err)
-	}
-
-	return nil
-}
-
-func (s *service) StoreStrategy(user models.User, strategy models.Strategy) (int, error) {
-	query := `
-	INSERT INTO strategies (user_id, created_by, name, description) 
-	VALUES (?, ?, ?, ?) 
-	RETURNING id`
-
-	var id int
-	err := s.db.QueryRow(query, user.ID, user.Name, strategy.Name, strategy.Description).Scan(&id)
-	if err != nil {
-		return 0, fmt.Errorf("failed to create strategy: %w", err)
-	}
-
-	return id, nil
+	return &st, nil
 }
 
 func (s *service) RetrieveStrategy(id string) (*models.Strategy, error) {
-	query := `
-	SELECT user_id, created_by, name, description, atlas, public, created_at, updated_at 
+	strategyQuery := `
+	SELECT *
 	FROM strategies 
 	WHERE id = ?`
 
 	// TODO: create DTO for strategy
 	var strategy models.Strategy
 
-	err := s.db.QueryRow(query, id).Scan(&strategy.UserID, &strategy.CreatedBy, &strategy.Name, &strategy.Description, &strategy.Atlas, &strategy.Public, &strategy.CreatedAt, &strategy.UpdatedAt)
+	err := s.db.QueryRow(strategyQuery, id).Scan(&strategy.UserID, &strategy.CreatedBy, &strategy.Name, &strategy.Description, &strategy.Atlas, &strategy.Public, &strategy.CreatedAt, &strategy.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve strategy: %w", err)
 	}
 
+	itemsQuery := `
+	SELECT si.*, i.*
+	FROM strategy_items si
+	JOIN items i ON si.item_id = i.id
+	WHERE strategy_id = ?
+	`
+
+	rows, err := s.db.Query(itemsQuery, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve strategy items: %w", err)
+	}
+
+	for rows.Next() {
+		var item models.SItem
+
+		if err := rows.Scan(&item.ID, &item.StrategyID, &item.Icon, &item.TableID, &item.Amount, &item.Role, &item.Pair, &item.DropChance, &item.Icon, &item.Name, &item.Base, &item.Category, &item.Value, &item.Currency, &item.Listed, &item.UserID, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			return nil, err
+		}
+
+
+	}
+
 	return &strategy, nil
+}
+
+func (s *service) StoreStrategyItem(strategyID string, item models.StrategyItem) error {
+	return nil
 }

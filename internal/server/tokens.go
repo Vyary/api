@@ -8,6 +8,11 @@ import (
 	"github.com/google/uuid"
 )
 
+var (
+	jwtExpiration        = 24 * time.Hour * 7
+	jwtRefreshExpiration = 24 * time.Hour * 30
+)
+
 func (s *Server) GenTokenPair(user models.User) (*models.TokenPair, error) {
 	now := time.Now()
 	tokenID := uuid.New().String()

@@ -2,7 +2,6 @@
 package server
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -10,7 +9,6 @@ import (
 	"time"
 
 	"github.com/Vyary/api/internal/database"
-	"github.com/Vyary/api/internal/models"
 	_ "github.com/joho/godotenv/autoload"
 )
 
@@ -40,16 +38,4 @@ func New() *http.Server {
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    1 << 20,
 	}
-}
-
-func writeError(w http.ResponseWriter, message string, code int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-
-	response := models.ErrorResponse{
-		Error: message,
-		Code:  code,
-	}
-
-	json.NewEncoder(w).Encode(response)
 }

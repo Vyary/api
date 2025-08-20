@@ -7,11 +7,6 @@ import (
 	"github.com/Vyary/api/internal/models"
 )
 
-var (
-	jwtExpiration        = 15 * time.Minute
-	jwtRefreshExpiration = 24 * time.Hour * 7
-)
-
 func setJWTCookies(w http.ResponseWriter, tokenPair models.TokenPair) {
 	jwtCookie := http.Cookie{
 		Name:     "jwt_token",
