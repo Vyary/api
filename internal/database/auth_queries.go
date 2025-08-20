@@ -19,7 +19,7 @@ func (s *service) StoreOAuthToken(id string, token models.OAuthToken) error {
 		scope = excluded.scope,
 		sub = excluded.sub`
 
-	_, err := s.db.Exec(query, token.AccessToken, token.ExpiresIn, token.TokenType, token.Scope, token.Sub, id)
+	_, err := s.db.Exec(query, id, token.Username, token.AccessToken, token.ExpiresIn, token.TokenType, token.Scope, token.Sub)
 	if err != nil {
 		return fmt.Errorf("failed to store OAuth token to db: %w", err)
 	}
