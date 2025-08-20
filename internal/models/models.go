@@ -20,7 +20,7 @@ type OAuthToken struct {
 }
 
 type User struct {
-	ID   string `json:"id"`
+	ID   string `json:"uuid"`
 	Name string `json:"name"`
 }
 
