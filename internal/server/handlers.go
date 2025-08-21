@@ -34,6 +34,7 @@ func (s *Server) CreateStrategyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Access-Control-Expose-Headers", "Location")
 	w.Header().Set("Location", fmt.Sprintf("/strategies/%d", storedStrategy.ID))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
