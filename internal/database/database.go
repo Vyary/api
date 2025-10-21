@@ -4,7 +4,6 @@ package database
 
 import (
 	"database/sql"
-	"fmt"
 	"log/slog"
 	"os"
 	"time"
@@ -14,6 +13,8 @@ import (
 )
 
 type Service interface {
+	GetItemsByCategory(category string) (*[]models.Item, error)
+
 	StoreOAuthToken(id string, token models.OAuthToken) error
 	RemoveOAuthToken(id string) error
 
@@ -34,22 +35,14 @@ type service struct {
 }
 
 func New() Service {
-	dbName := os.Getenv("DB_NAME")
-	token := os.Getenv("DB_TOKEN")
+	dbURL := os.Getenv("DB_URL")
 
-	if dbName == "" {
-		slog.Error("DB_NAME env variable is required")
+	if dbURL == "" {
+		slog.Error("DB_URL env variable is required")
 		os.Exit(1)
 	}
 
-	if token == "" {
-		slog.Error("TOKEN env variable is required")
-		os.Exit(1)
-	}
-
-	url := fmt.Sprintf("libsql://%s.turso.io?authToken=%s", dbName, token)
-
-	db, err := sql.Open("libsql", url)
+	db, err := sql.Open("libsql", dbURL)
 	if err != nil {
 		slog.Error(err.Error())
 		os.Exit(1)
@@ -58,73 +51,64 @@ func New() Service {
 	return &service{db: db}
 }
 
-func (s *service) StoreStrategy(user models.User, strategy models.Strategy) (*models.StrategyDTO, error) {
+func (s *service) GetItemsByCategory(category string) (*[]models.Item, error) {
 	query := `
-	INSERT INTO strategies (user_id, created_by, name, description, atlas, public) 
-	VALUES (?, ?, ?, ?, ?, ?) 
-	RETURNING id, created_by, name, description, atlas, public, created_at, updated_at`
+	SELECT
+		id,
+		COALESCE(realm, ''),
+		COALESCE(w, 0),
+		COALESCE(h, 0),
+		COALESCE(icon, ''),
+		COALESCE(name, ''),
+		COALESCE(base_type, ''),
+		COALESCE(category, ''),
+		COALESCE(sub_category, ''),
+		COALESCE(rarity, ''),
+		COALESCE(support, 0),
+		COALESCE(desecrated, 0),
+		COALESCE(properties, ''),
+		COALESCE(requirements, ''),
+		COALESCE(enchant_mods, ''),
+		COALESCE(rune_mods, ''),
+		COALESCE(implicit_mods, ''),
+		COALESCE(explicit_mods, ''),
+		COALESCE(fractured_mods, ''),
+		COALESCE(desecrated_mods, ''),
+		COALESCE(flavour_text, ''),
+		COALESCE(descr_text, ''),
+		COALESCE(sec_descr_text, ''),
+		COALESCE(icon_tier_text, ''),
+		COALESCE(gem_sockets, 0)
+	FROM items
+	WHERE category = ?`
 
-	var strategyDTO models.StrategyDTO
-	if err := s.db.QueryRow(query, user.ID, user.Name, strategy.Name, strategy.Description, strategy.Atlas, strategy.Public).Scan(&strategyDTO.ID, &strategyDTO.CreatedBy, &strategyDTO.Name, &strategyDTO.Description, &strategyDTO.Atlas, &strategyDTO.Public, &strategyDTO.CreatedAt, &strategyDTO.UpdatedAt); err != nil {
-		return nil, fmt.Errorf("failed to create strategy: %w", err)
-	}
-
-	return &strategyDTO, nil
-}
-
-func (s *service) StoreStrategyTable(strategyID string, table models.StrategyTable) (*models.StrategyTable, error) {
-	query := `
-	INSERT INTO strategy_tables (strategy_id, type, title)
-	VALUES (?, ?, ?)
-	RETURNING id, strategy_id, type, title`
-
-	var st models.StrategyTable
-	if err := s.db.QueryRow(query, strategyID, table.Type, table.Title).Scan(&st.ID, &st.StrategyID, &st.Type, &st.Title); err != nil {
-		return nil, fmt.Errorf("failed to create table: %w", err)
-	}
-
-	return &st, nil
-}
-
-func (s *service) RetrieveStrategy(id string) (*models.Strategy, error) {
-	strategyQuery := `
-	SELECT *
-	FROM strategies 
-	WHERE id = ?`
-
-	// TODO: create DTO for strategy
-	var strategy models.Strategy
-
-	err := s.db.QueryRow(strategyQuery, id).Scan(&strategy.UserID, &strategy.CreatedBy, &strategy.Name, &strategy.Description, &strategy.Atlas, &strategy.Public, &strategy.CreatedAt, &strategy.UpdatedAt)
+	rows, err := s.db.Query(query, category)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve strategy: %w", err)
+		return nil, err
 	}
+	defer rows.Close()
 
-	itemsQuery := `
-	SELECT si.*, i.*
-	FROM strategy_items si
-	JOIN items i ON si.item_id = i.id
-	WHERE strategy_id = ?
-	`
-
-	rows, err := s.db.Query(itemsQuery, id)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve strategy items: %w", err)
-	}
+	var items []models.Item
 
 	for rows.Next() {
-		var item models.SItem
-
-		if err := rows.Scan(&item.ID, &item.StrategyID, &item.Icon, &item.TableID, &item.Amount, &item.Role, &item.Pair, &item.DropChance, &item.Icon, &item.Name, &item.Base, &item.Category, &item.Value, &item.Currency, &item.Listed, &item.UserID, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		var i models.Item
+		err := rows.Scan(
+			&i.ID, &i.Realm, &i.W, &i.H, &i.Icon, &i.Name,
+			&i.BaseType, &i.Category, &i.SubCategory, &i.Rarity, &i.Support, &i.Desecrated,
+			&i.Properties, &i.Requirements, &i.EnchantMods, &i.RuneMods,
+			&i.ImplicitMods, &i.ExplicitMods, &i.FracturedMods, &i.DesecratedMods,
+			&i.FlavourText, &i.DescrText, &i.SecDescrText, &i.IconTierText,
+			&i.GemSocketsCount,
+		)
+		if err != nil {
 			return nil, err
 		}
-
-
+		items = append(items, i)
 	}
 
-	return &strategy, nil
-}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
-func (s *service) StoreStrategyItem(strategyID string, item models.StrategyItem) error {
-	return nil
+	return &items, nil
 }

@@ -19,9 +19,40 @@ type OAuthToken struct {
 	Sub         string `json:"sub"`
 }
 
+type LatestPrice struct {
+	ID       int64   `json:"id"`
+	ItemID   string  `json:"item_id"`
+	Realm    string  `json:"realm"`
+	League   string  `json:"league"`
+	Currency string  `json:"currency"`
+	Value    float64 `json:"value"`
+	Stock    int64   `json:"stock"`
+}
+
+type Price struct {
+	ID           int64    `json:"id"`
+	ItemID       string   `json:"item_id"`
+	Realm        *string  `json:"realm"`
+	League       string   `json:"league"`
+	Currency     string   `json:"currency"`
+	Value        *float64 `json:"value"`
+	LowestRatio  *float64 `json:"lowest_ratio"`
+	HighestRatio *float64 `json:"highest_ratio"`
+	VolumeTraded *int64   `json:"volume_traded"`
+	LowestStock  *int64   `json:"lowest_stock"`
+	HighestStock *int64   `json:"highest_stock"`
+	Timestamp    *int64   `json:"timestamp"`
+}
+
 type User struct {
-	ID   string `json:"uuid"`
-	Name string `json:"name"`
+	ID          string  `json:"id"`
+	Name        string  `json:"username"`
+	AccessToken string  `json:"access_token"`
+	ExpiresIn   int64   `json:"expires_in"`
+	TokenType   string  `json:"token_type"`
+	Scope       string  `json:"scope"`
+	Sub         string  `json:"sub"`
+	Role        *string `json:"role"`
 }
 
 type JWTClaims struct {
@@ -39,20 +70,6 @@ type ErrorResponse struct {
 type TokenPair struct {
 	JWT        string
 	JWTRefresh string
-}
-
-type Item struct {
-	ID        int     `json:"id"`
-	Icon      string  `json:"icon"`
-	Name      string  `json:"name"`
-	Base      string  `json:"base"`
-	Category  string  `json:"category"`
-	Value     float32 `json:"value"`
-	Currency  string  `json:"currency"`
-	Listed    int     `json:"listed"`
-	UserID    string  `json:"user_id"`
-	CreatedAt int64   `json:"created_at"`
-	UpdatedAt int64   `json:"updated_at"`
 }
 
 type Strategy struct {

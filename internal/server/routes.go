@@ -11,6 +11,8 @@ import (
 func (s *Server) RegisterRoutes() http.Handler {
 	mux := http.NewServeMux()
 
+	mux.HandleFunc("GET /{category}", s.GetItemsByCategoryHandler)
+
 	mux.HandleFunc("GET /info", s.InfoHandler)
 
 	mux.HandleFunc("POST /auth/poe/exchange", s.ExchangeHandler)
@@ -38,8 +40,6 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	return mux
 }
-
-
 
 func (s *Server) AddStrategyItemHandler(w http.ResponseWriter, r *http.Request) {
 	strategyID := r.PathValue("strategy_id")
