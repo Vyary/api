@@ -5,6 +5,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -35,7 +36,7 @@ type service struct {
 }
 
 func New() Service {
-	dbName := "file:./internal/database/local/vault.db?_journal_mode=WAL"
+	dbName := "file:./internal/database/local/vault.db"
 
 	db, err := sql.Open("sqlite", dbName)
 	if err != nil {
@@ -47,10 +48,19 @@ func New() Service {
 	db.SetMaxIdleConns(50)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
-	db.Exec("PRAGMA query_only = ON;")
-	db.Exec("PRAGMA synchronous = NORMAL;")
-	db.Exec("PRAGMA wal_autocheckpoint = 1000;")
-	db.Exec("PRAGMA busy_timeout = 5000;")
+	pragmas := []string{
+		"PRAGMA journal_mode=WAL;",
+		"PRAGMA query_only=ON;",
+		"PRAGMA synchronous=NORMAL;",
+		"PRAGMA wal_autocheckpoint=1000;",
+		"PRAGMA busy_timeout=5000;",
+	}
+
+	for _, p := range pragmas {
+		if _, err := db.Exec(p); err != nil {
+			log.Printf("warning: failed to set pragma %q: %v", p, err)
+		}
+	}
 
 	return &service{db: db}
 }
