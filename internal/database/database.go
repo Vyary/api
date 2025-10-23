@@ -4,12 +4,12 @@ package database
 
 import (
 	"database/sql"
-	"log/slog"
+	"fmt"
 	"os"
 	"time"
 
 	"github.com/Vyary/api/internal/models"
-	_ "github.com/tursodatabase/libsql-client-go/libsql"
+	_ "modernc.org/sqlite"
 )
 
 type Service interface {
@@ -35,18 +35,22 @@ type service struct {
 }
 
 func New() Service {
-	dbURL := os.Getenv("DB_URL")
+	dbName := "file:./internal/database/local/vault.db?_journal_mode=WAL"
 
-	if dbURL == "" {
-		slog.Error("DB_URL env variable is required")
-		os.Exit(1)
-	}
-
-	db, err := sql.Open("libsql", dbURL)
+	db, err := sql.Open("sqlite", dbName)
 	if err != nil {
-		slog.Error(err.Error())
+		fmt.Fprintf(os.Stderr, "failed to open db %s", err)
 		os.Exit(1)
 	}
+
+	db.SetMaxOpenConns(50)
+	db.SetMaxIdleConns(50)
+	db.SetConnMaxLifetime(5 * time.Minute)
+
+	db.Exec("PRAGMA query_only = ON;")
+	db.Exec("PRAGMA synchronous = NORMAL;")
+	db.Exec("PRAGMA wal_autocheckpoint = 1000;")
+	db.Exec("PRAGMA busy_timeout = 5000;")
 
 	return &service{db: db}
 }
@@ -55,30 +59,36 @@ func (s *service) GetItemsByCategory(category string) (*[]models.Item, error) {
 	query := `
 	SELECT
 		id,
-		COALESCE(realm, ''),
-		COALESCE(w, 0),
-		COALESCE(h, 0),
-		COALESCE(icon, ''),
-		COALESCE(name, ''),
-		COALESCE(base_type, ''),
-		COALESCE(category, ''),
-		COALESCE(sub_category, ''),
-		COALESCE(rarity, ''),
-		COALESCE(support, 0),
-		COALESCE(desecrated, 0),
-		COALESCE(properties, ''),
-		COALESCE(requirements, ''),
-		COALESCE(enchant_mods, ''),
-		COALESCE(rune_mods, ''),
-		COALESCE(implicit_mods, ''),
-		COALESCE(explicit_mods, ''),
-		COALESCE(fractured_mods, ''),
-		COALESCE(desecrated_mods, ''),
-		COALESCE(flavour_text, ''),
-		COALESCE(descr_text, ''),
-		COALESCE(sec_descr_text, ''),
-		COALESCE(icon_tier_text, ''),
-		COALESCE(gem_sockets, 0)
+		realm,
+		category,
+		sub_category,
+		icon,
+		icon_tier_text,
+		name,
+		base_type,
+		rarity,
+		w,
+		h,
+		ilvl,
+		sockets_count,
+		properties,
+		requirements,
+		enchant_mods,
+		rune_mods,
+		implicit_mods,
+		explicit_mods,
+		fractured_mods,
+		desecrated_mods,
+		flavour_text,
+		descr_text,
+		sec_descr_text,
+		support,
+		duplicated,
+		corrupted,
+		sanctified,
+		desecrated,
+		buy,
+		sell
 	FROM items
 	WHERE category = ?`
 
@@ -93,12 +103,37 @@ func (s *service) GetItemsByCategory(category string) (*[]models.Item, error) {
 	for rows.Next() {
 		var i models.Item
 		err := rows.Scan(
-			&i.ID, &i.Realm, &i.W, &i.H, &i.Icon, &i.Name,
-			&i.BaseType, &i.Category, &i.SubCategory, &i.Rarity, &i.Support, &i.Desecrated,
-			&i.Properties, &i.Requirements, &i.EnchantMods, &i.RuneMods,
-			&i.ImplicitMods, &i.ExplicitMods, &i.FracturedMods, &i.DesecratedMods,
-			&i.FlavourText, &i.DescrText, &i.SecDescrText, &i.IconTierText,
-			&i.GemSocketsCount,
+			&i.ID,
+			&i.Realm,
+			&i.Category,
+			&i.SubCategory,
+			&i.Icon,
+			&i.IconTierText,
+			&i.Name,
+			&i.BaseType,
+			&i.Rarity,
+			&i.W,
+			&i.H,
+			&i.Ilvl,
+			&i.SocketsCount,
+			&i.Properties,
+			&i.Requirements,
+			&i.EnchantMods,
+			&i.RuneMods,
+			&i.ImplicitMods,
+			&i.ExplicitMods,
+			&i.FracturedMods,
+			&i.DesecratedMods,
+			&i.FlavourText,
+			&i.DescrText,
+			&i.SecDescrText,
+			&i.Support,
+			&i.Duplicated,
+			&i.Corrupted,
+			&i.Sanctified,
+			&i.Desecrated,
+			&i.Buy,
+			&i.Sell,
 		)
 		if err != nil {
 			return nil, err

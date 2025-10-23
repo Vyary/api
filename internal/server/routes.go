@@ -1,17 +1,21 @@
 package server
 
 import (
+	"compress/gzip"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/Vyary/api/internal/models"
+	"github.com/andybalholm/brotli"
 )
 
 func (s *Server) RegisterRoutes() http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /{category}", s.GetItemsByCategoryHandler)
+	mux.Handle("GET /{category}", CompressMiddleware(s.GetItemsByCategoryHandler()))
 
 	mux.HandleFunc("GET /info", s.InfoHandler)
 
@@ -67,4 +71,42 @@ func (s *Server) AddStrategyItemHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func CompressMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		enc := strings.ToLower(r.Header.Get("Accept-Encoding"))
+		var writer io.WriteCloser
+
+		switch {
+		case strings.Contains(enc, "br"):
+			w.Header().Set("Content-Encoding", "br")
+			writer = brotli.NewWriterLevel(w, brotli.BestSpeed)
+		case strings.Contains(enc, "gzip"):
+			w.Header().Set("Content-Encoding", "gzip")
+			var err error
+			writer, err = gzip.NewWriterLevel(w, gzip.BestSpeed)
+			if err != nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
+
+		if writer != nil {
+			w.Header().Add("Vary", "Accept-Encoding")
+			defer writer.Close()
+			w = &compressResponseWriter{ResponseWriter: w, Writer: writer}
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+type compressResponseWriter struct {
+	http.ResponseWriter
+	Writer io.Writer
+}
+
+func (w *compressResponseWriter) Write(b []byte) (int, error) {
+	return w.Writer.Write(b)
 }

@@ -1,0 +1,10 @@
+version: "3.2"
+
+services:
+  api:
+    image: vyary/api:latest
+    environment:
+      PORT: 8081
+      CLIENT_SECRET: "P2Pa4QTUH16b"
+      JWT_SECRET: "testing123"
+      DB_URL: "libsql://vault-vyary.aws-eu-west-1.turso.io?authToken=eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NTk0MDU5NzksImlkIjoiZmM4NzE3MmUtMjljOC00ZmE3LTgxYmQtNzBjMmM3ODE3NTEyIiwicmlkIjoiZTliYjIyZDctMDE3MS00ZGU0LWI1ODktYjkyZWMxMjQ1YjFmIn0.KbMD6gN5A4F3jqlzjTvGjHXn1x7_fAu3UMf2II83r_UA5jNpK3DqRLW6J4muWFvEYpz5gO3JYFx87zejzfoxBw"

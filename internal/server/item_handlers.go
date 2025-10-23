@@ -4,19 +4,27 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"time"
 )
 
-func (s *Server) GetItemsByCategoryHandler(w http.ResponseWriter, r *http.Request) {
-	category := r.PathValue("category")
+func (s *Server) GetItemsByCategoryHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		category := r.PathValue("category")
 
-	items, err := s.db.GetItemsByCategory(category)
-	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-	}
+		start := time.Now()
 
-	w.Header().Set("Content-Type", "application/json")
+		items, err := s.db.GetItemsByCategory(category)
+		if err != nil {
+			slog.Error(err.Error())
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
 
-	if err := json.NewEncoder(w).Encode(items); err != nil {
-		slog.Error("encoding items response", "error", err)
-	}
+		slog.Info("timed", "since", time.Since(start), "path", r.URL.Path)
+
+		w.Header().Set("Content-Type", "application/json")
+
+		if err := json.NewEncoder(w).Encode(items); err != nil {
+			slog.Error("encoding items response", "error", err)
+		}
+	})
 }
