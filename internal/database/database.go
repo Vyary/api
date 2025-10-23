@@ -5,12 +5,12 @@ package database
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/Vyary/api/internal/models"
-	_ "modernc.org/sqlite"
+	"github.com/tursodatabase/go-libsql"
 )
 
 type Service interface {
@@ -36,31 +36,28 @@ type service struct {
 }
 
 func New() Service {
-	dbName := "file:./internal/database/local/vault.db"
+	primaryUrl := os.Getenv("TURSO_URL")
+	authToken := os.Getenv("TURSO_AUTH_TOKEN")
 
-	db, err := sql.Open("sqlite", dbName)
+	dbName := "local.db"
+
+	dir, err := os.MkdirTemp("", "libsql-*")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to open db %s", err)
+		fmt.Println("Error creating temporary directory:", err)
 		os.Exit(1)
 	}
 
-	db.SetMaxOpenConns(50)
-	db.SetMaxIdleConns(50)
-	db.SetConnMaxLifetime(5 * time.Minute)
+	dbPath := filepath.Join(dir, dbName)
 
-	pragmas := []string{
-		"PRAGMA journal_mode=WAL;",
-		"PRAGMA query_only=ON;",
-		"PRAGMA synchronous=NORMAL;",
-		"PRAGMA wal_autocheckpoint=1000;",
-		"PRAGMA busy_timeout=5000;",
+	connector, err := libsql.NewEmbeddedReplicaConnector(dbPath, primaryUrl,
+		libsql.WithAuthToken(authToken),
+	)
+	if err != nil {
+		fmt.Println("Error creating connector:", err)
+		os.Exit(1)
 	}
 
-	for _, p := range pragmas {
-		if _, err := db.Exec(p); err != nil {
-			log.Printf("warning: failed to set pragma %q: %v", p, err)
-		}
-	}
+	db := sql.OpenDB(connector)
 
 	return &service{db: db}
 }
