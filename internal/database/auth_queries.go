@@ -8,7 +8,7 @@ import (
 	"github.com/Vyary/api/internal/models"
 )
 
-func (s *service) StoreOAuthToken(id string, token models.OAuthToken) error {
+func (s *tursoDB) StoreOAuthToken(id string, token models.OAuthToken) error {
 	query := `
 	INSERT INTO users (id, username, access_token, expires_in, token_type, scope, sub)
 	VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -27,7 +27,7 @@ func (s *service) StoreOAuthToken(id string, token models.OAuthToken) error {
 	return nil
 }
 
-func (s *service) RemoveOAuthToken(id string) error {
+func (s *tursoDB) RemoveOAuthToken(id string) error {
 	query := `
 	UPDATE users 
 	SET 
@@ -46,7 +46,7 @@ func (s *service) RemoveOAuthToken(id string) error {
 	return nil
 }
 
-func (s *service) StoreRefreshToken(userID string, tokenID string, expiration time.Duration) error {
+func (s *tursoDB) StoreRefreshToken(userID string, tokenID string, expiration time.Duration) error {
 	query := `
 	INSERT INTO refresh_tokens (user_id, token_id, expires_at) 
 	VALUES (?, ?, ?)`
@@ -61,7 +61,7 @@ func (s *service) StoreRefreshToken(userID string, tokenID string, expiration ti
 	return nil
 }
 
-func (s *service) IsRefreshTokenValid(tokenID string) bool {
+func (s *tursoDB) IsRefreshTokenValid(tokenID string) bool {
 	query := `
 	SELECT COUNT(*) 
 	FROM refresh_tokens 
@@ -77,7 +77,7 @@ func (s *service) IsRefreshTokenValid(tokenID string) bool {
 	return count > 0
 }
 
-func (s *service) RevokeRefreshToken(userID string, tokenID string) error {
+func (s *tursoDB) RevokeRefreshToken(userID string, tokenID string) error {
 	query := `
 	DELETE FROM refresh_tokens 
 	WHERE user_id = ? AND token_id = ?`
@@ -90,7 +90,7 @@ func (s *service) RevokeRefreshToken(userID string, tokenID string) error {
 	return nil
 }
 
-func (s *service) RevokeAllRefreshTokens(userID string) error {
+func (s *tursoDB) RevokeAllRefreshTokens(userID string) error {
 	query := `
 	DELETE FROM refresh_tokens 
 	WHERE user_id = ?`
@@ -103,7 +103,7 @@ func (s *service) RevokeAllRefreshTokens(userID string) error {
 	return nil
 }
 
-func (s *service) CleanupRefreshTokens() error {
+func (s *tursoDB) CleanupRefreshTokens() error {
 	query := `
 	DELETE FROM refresh_tokens 
 	WHERE expires_at < ?`

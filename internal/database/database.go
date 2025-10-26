@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/Vyary/api/internal/models"
@@ -29,14 +30,30 @@ type Service interface {
 	StoreStrategyItem(strategyID string, item models.StrategyItem) error
 
 	RetrieveStrategy(id string) (*models.Strategy, error)
+
+	Close() error
 }
 
-type service struct {
-	db *sql.DB
+type tursoDB struct {
+	db        *sql.DB
+	connector *libsql.Connector
 }
 
-func New() Service {
-	primaryUrl := os.Getenv("TURSO_URL")
+var (
+	instance *tursoDB
+	once     sync.Once
+)
+
+func Get() *tursoDB {
+	once.Do(func() {
+		instance = connect()
+	})
+
+	return instance
+}
+
+func connect() *tursoDB {
+	primaryURL := os.Getenv("TURSO_URL")
 	authToken := os.Getenv("TURSO_AUTH_TOKEN")
 
 	dbName := "local.db"
@@ -49,8 +66,11 @@ func New() Service {
 
 	dbPath := filepath.Join(dir, dbName)
 
-	connector, err := libsql.NewEmbeddedReplicaConnector(dbPath, primaryUrl,
+	syncInterval := time.Hour
+
+	connector, err := libsql.NewEmbeddedReplicaConnector(dbPath, primaryURL,
 		libsql.WithAuthToken(authToken),
+		libsql.WithSyncInterval(syncInterval),
 	)
 	if err != nil {
 		fmt.Println("Error creating connector:", err)
@@ -59,10 +79,32 @@ func New() Service {
 
 	db := sql.OpenDB(connector)
 
-	return &service{db: db}
+	return &tursoDB{db: db, connector: connector}
 }
 
-func (s *service) GetItemsByCategory(category string) (*[]models.Item, error) {
+func (s *tursoDB) Close() error {
+	var errs []error
+
+	if s.connector != nil {
+		if err := s.connector.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if s.db != nil {
+		if err := s.db.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("service close errors: %v", errs)
+	}
+
+	return nil
+}
+
+func (s *tursoDB) GetItemsByCategory(category string) (*[]models.Item, error) {
 	query := `
 	SELECT
 		id,

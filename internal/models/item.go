@@ -6,11 +6,11 @@ type Item struct {
 	ID             string          `json:"id"`
 	Realm          string          `json:"realm"`
 	Category       string          `json:"category"`
-	SubCategory    string          `json:"sub_category"`
+	SubCategory    string          `json:"subCategory"`
 	Icon           string          `json:"icon"`
 	IconTierText   string          `json:"iconTierText"`
 	Name           string          `json:"name"`
-	BaseType       string          `json:"base_type"`
+	BaseType       string          `json:"baseType"`
 	Rarity         string          `json:"rarity"`
 	W              int             `json:"w"`
 	H              int             `json:"h"`

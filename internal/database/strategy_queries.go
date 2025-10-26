@@ -6,7 +6,7 @@ import (
 	"github.com/Vyary/api/internal/models"
 )
 
-func (s *service) StoreStrategy(user models.User, strategy models.Strategy) (*models.StrategyDTO, error) {
+func (s *tursoDB) StoreStrategy(user models.User, strategy models.Strategy) (*models.StrategyDTO, error) {
 	query := `
 	INSERT INTO strategies (user_id, created_by, name, description, atlas, public) 
 	VALUES (?, ?, ?, ?, ?, ?) 
@@ -20,7 +20,7 @@ func (s *service) StoreStrategy(user models.User, strategy models.Strategy) (*mo
 	return &strategyDTO, nil
 }
 
-func (s *service) StoreStrategyTable(strategyID string, table models.StrategyTable) (*models.StrategyTable, error) {
+func (s *tursoDB) StoreStrategyTable(strategyID string, table models.StrategyTable) (*models.StrategyTable, error) {
 	query := `
 	INSERT INTO strategy_tables (strategy_id, type, title)
 	VALUES (?, ?, ?)
@@ -34,7 +34,7 @@ func (s *service) StoreStrategyTable(strategyID string, table models.StrategyTab
 	return &st, nil
 }
 
-func (s *service) RetrieveStrategy(id string) (*models.Strategy, error) {
+func (s *tursoDB) RetrieveStrategy(id string) (*models.Strategy, error) {
 	strategyQuery := `
 	SELECT *
 	FROM strategies 
@@ -73,6 +73,6 @@ func (s *service) RetrieveStrategy(id string) (*models.Strategy, error) {
 	return &strategy, nil
 }
 
-func (s *service) StoreStrategyItem(strategyID string, item models.StrategyItem) error {
+func (s *tursoDB) StoreStrategyItem(strategyID string, item models.StrategyItem) error {
 	return nil
 }

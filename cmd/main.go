@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Vyary/api/internal/database"
 	"github.com/Vyary/api/internal/server"
 	"github.com/Vyary/api/pkg/telemetry"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
@@ -41,7 +42,10 @@ func run() error {
 		slog.SetDefault(logger)
 	}
 
-	srv := server.New()
+	db := database.Get()
+	defer db.Close()
+
+	srv := server.New(db)
 
 	srvErr := make(chan error, 1)
 	go func() {

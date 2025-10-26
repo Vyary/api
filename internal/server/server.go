@@ -17,7 +17,7 @@ type Server struct {
 	db   database.Service
 }
 
-func New() *http.Server {
+func New(db database.Service) *http.Server {
 	port := os.Getenv("PORT")
 	if port == "" {
 		slog.Error("PORT env variable is required")
@@ -26,7 +26,7 @@ func New() *http.Server {
 
 	srv := &Server{
 		port: port,
-		db:   database.New(),
+		db:   db,
 	}
 
 	return &http.Server{
