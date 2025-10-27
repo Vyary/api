@@ -66,7 +66,7 @@ func connect() *tursoDB {
 
 	dbPath := filepath.Join(dir, dbName)
 
-	syncInterval := time.Hour
+	syncInterval := 5 * time.Minute
 
 	connector, err := libsql.NewEmbeddedReplicaConnector(dbPath, primaryURL,
 		libsql.WithAuthToken(authToken),
