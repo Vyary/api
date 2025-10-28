@@ -15,7 +15,8 @@ import (
 func (s *Server) RegisterRoutes() http.Handler {
 	mux := http.NewServeMux()
 
-	mux.Handle("GET /{category}", CompressMiddleware(s.GetItemsByCategoryHandler()))
+	mux.Handle("GET /categories/{categoryID}", CompressMiddleware(s.GetItemsByCategoryHandler()))
+	mux.Handle("GET /subcategories/{subcategoryID}", CompressMiddleware(s.GetItemsBySubCategoryHandler()))
 
 	mux.HandleFunc("GET /info", s.InfoHandler)
 

@@ -16,6 +16,7 @@ import (
 
 type Service interface {
 	GetItemsByCategory(category string) (*[]models.Item, error)
+	GetItemsBySubCategory(category string) (*[]models.Item, error)
 
 	StoreOAuthToken(id string, token models.OAuthToken) error
 	RemoveOAuthToken(id string) error
@@ -142,6 +143,99 @@ func (s *tursoDB) GetItemsByCategory(category string) (*[]models.Item, error) {
 	WHERE category = ?`
 
 	rows, err := s.db.Query(query, category)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []models.Item
+
+	for rows.Next() {
+		var i models.Item
+		err := rows.Scan(
+			&i.ID,
+			&i.Realm,
+			&i.Category,
+			&i.SubCategory,
+			&i.Icon,
+			&i.IconTierText,
+			&i.Name,
+			&i.BaseType,
+			&i.Rarity,
+			&i.W,
+			&i.H,
+			&i.Ilvl,
+			&i.SocketsCount,
+			&i.Properties,
+			&i.Requirements,
+			&i.EnchantMods,
+			&i.RuneMods,
+			&i.ImplicitMods,
+			&i.ExplicitMods,
+			&i.FracturedMods,
+			&i.DesecratedMods,
+			&i.FlavourText,
+			&i.DescrText,
+			&i.SecDescrText,
+			&i.Support,
+			&i.Duplicated,
+			&i.Corrupted,
+			&i.Sanctified,
+			&i.Desecrated,
+			&i.Buy,
+			&i.Sell,
+		)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return &items, nil
+}
+
+func (s *tursoDB) GetItemsBySubCategory(subCategory string) (*[]models.Item, error) {
+	query := `
+	SELECT
+		id,
+		realm,
+		category,
+		sub_category,
+		icon,
+		icon_tier_text,
+		name,
+		base_type,
+		rarity,
+		w,
+		h,
+		ilvl,
+		sockets_count,
+		properties,
+		requirements,
+		enchant_mods,
+		rune_mods,
+		implicit_mods,
+		explicit_mods,
+		fractured_mods,
+		desecrated_mods,
+		flavour_text,
+		descr_text,
+		sec_descr_text,
+		support,
+		duplicated,
+		corrupted,
+		sanctified,
+		desecrated,
+		buy,
+		sell
+	FROM items
+	WHERE sub_category = ?`
+
+	rows, err := s.db.Query(query, subCategory)
 	if err != nil {
 		return nil, err
 	}
