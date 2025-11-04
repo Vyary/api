@@ -1,37 +1,53 @@
 package models
 
-import "encoding/json"
+import (
+	"encoding/json"
+)
+
+type ItemID string
+type League string
+type Currency string
+type Prices map[Currency]float64
+
+type Price struct {
+	ItemID     ItemID
+	Price      float64
+	CurrencyID string
+	Volume     float64
+	Stock      float64
+	League     League
+	Timestamp  int64
+}
 
 type Item struct {
-	ID             string          `json:"id"`
-	Realm          string          `json:"realm"`
-	Category       string          `json:"category"`
-	SubCategory    string          `json:"subCategory"`
-	Icon           string          `json:"icon"`
-	IconTierText   string          `json:"iconTierText"`
-	Name           string          `json:"name"`
-	BaseType       string          `json:"baseType"`
-	Rarity         string          `json:"rarity"`
-	W              int             `json:"w"`
-	H              int             `json:"h"`
-	Ilvl           int             `json:"ilvl"`
-	SocketsCount   int             `json:"socketsCount"`
-	Properties     json.RawMessage `json:"properties"`
-	Requirements   json.RawMessage `json:"requirements"`
-	EnchantMods    json.RawMessage `json:"enchantMods"`
-	RuneMods       json.RawMessage `json:"runeMods"`
-	ImplicitMods   json.RawMessage `json:"implicitMods"`
-	ExplicitMods   json.RawMessage `json:"explicitMods"`
-	FracturedMods  json.RawMessage `json:"fracturedMods"`
-	DesecratedMods json.RawMessage `json:"desecratedMods"`
-	FlavourText    string          `json:"flavourText"`
-	DescrText      string          `json:"descrText"`
-	SecDescrText   string          `json:"secDescrText"`
-	Support        bool            `json:"support"`
-	Duplicated     bool            `json:"duplicated"`
-	Corrupted      bool            `json:"corrupted"`
-	Sanctified     bool            `json:"sanctified"`
-	Desecrated     bool            `json:"desecrated"`
-	Buy            json.RawMessage `json:"buy"`
-	Sell           json.RawMessage `json:"sell"`
+	ID             ItemID            `json:"id"`
+	Realm          string            `json:"realm,omitempty"`
+	Category       string            `json:"category,omitempty"`
+	SubCategory    string            `json:"subCategory,omitempty"`
+	Icon           string            `json:"icon,omitempty"`
+	IconTierText   string            `json:"iconTierText,omitempty"`
+	Name           string            `json:"name,omitempty"`
+	BaseType       string            `json:"baseType,omitempty"`
+	Rarity         string            `json:"rarity,omitempty"`
+	W              int               `json:"w,omitempty"`
+	H              int               `json:"h,omitempty"`
+	Ilvl           int               `json:"ilvl,omitempty"`
+	SocketedItems  *json.RawMessage  `json:"socketedItems,omitempty"`
+	Properties     *json.RawMessage  `json:"properties,omitempty"`
+	Requirements   *json.RawMessage  `json:"requirements,omitempty"`
+	EnchantMods    *json.RawMessage  `json:"enchantMods,omitempty"`
+	RuneMods       *json.RawMessage  `json:"runeMods,omitempty"`
+	ImplicitMods   *json.RawMessage  `json:"implicitMods,omitempty"`
+	ExplicitMods   *json.RawMessage  `json:"explicitMods,omitempty"`
+	FracturedMods  *json.RawMessage  `json:"fracturedMods,omitempty"`
+	DesecratedMods *json.RawMessage  `json:"desecratedMods,omitempty"`
+	FlavourText    string            `json:"flavourText,omitempty"`
+	DescrText      string            `json:"descrText,omitempty"`
+	SecDescrText   string            `json:"secDescrText,omitempty"`
+	Support        bool              `json:"support,omitempty"`
+	Duplicated     bool              `json:"duplicated,omitempty"`
+	Corrupted      bool              `json:"corrupted,omitempty"`
+	Sanctified     bool              `json:"sanctified,omitempty"`
+	Desecrated     bool              `json:"desecrated,omitempty"`
+	Prices         map[League]Prices `json:"prices"`
 }

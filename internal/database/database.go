@@ -5,18 +5,21 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"log"
+	"log/slog"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/Vyary/api/internal/models"
-	"github.com/tursodatabase/go-libsql"
+
+	_ "github.com/tursodatabase/libsql-client-go/libsql"
 )
 
 type Service interface {
-	GetItemsByCategory(category string) (*[]models.Item, error)
-	GetItemsBySubCategory(category string) (*[]models.Item, error)
+	GetItemsByCategory(category string) ([]models.Item, error)
+	GetItemsBySubCategory(category string) ([]models.Item, error)
+	GetPrices(period int64) ([]models.Price, error)
 
 	StoreOAuthToken(id string, token models.OAuthToken) error
 	RemoveOAuthToken(id string) error
@@ -36,61 +39,52 @@ type Service interface {
 }
 
 type tursoDB struct {
-	db        *sql.DB
-	connector *libsql.Connector
+	db *sql.DB
 }
 
 var (
+	dbURL    = os.Getenv("DB_URL")
 	instance *tursoDB
 	once     sync.Once
 )
 
-func Get() *tursoDB {
+func Get() Service {
 	once.Do(func() {
-		instance = connect()
+		db := tursoDB{}
+
+		if err := db.connect(); err != nil {
+			log.Fatal("connecting to db: %w", err)
+		}
+
+		instance = &db
 	})
 
 	return instance
 }
 
-func connect() *tursoDB {
-	primaryURL := os.Getenv("TURSO_URL")
-	authToken := os.Getenv("TURSO_AUTH_TOKEN")
-
-	dbName := "local.db"
-
-	dir, err := os.MkdirTemp("", "libsql-*")
+func (s *tursoDB) connect() error {
+	db, err := sql.Open("libsql", dbURL)
 	if err != nil {
-		fmt.Println("Error creating temporary directory:", err)
-		os.Exit(1)
+		return err
 	}
 
-	dbPath := filepath.Join(dir, dbName)
+	db.SetMaxOpenConns(100)
+	db.SetMaxIdleConns(50)
+	db.SetConnMaxLifetime(30 * time.Minute)
 
-	syncInterval := 5 * time.Minute
+	s.db = db
 
-	connector, err := libsql.NewEmbeddedReplicaConnector(dbPath, primaryURL,
-		libsql.WithAuthToken(authToken),
-		libsql.WithSyncInterval(syncInterval),
-	)
-	if err != nil {
-		fmt.Println("Error creating connector:", err)
-		os.Exit(1)
-	}
-
-	db := sql.OpenDB(connector)
-
-	return &tursoDB{db: db, connector: connector}
+	return nil
 }
 
 func (s *tursoDB) Close() error {
 	var errs []error
 
-	if s.connector != nil {
-		if err := s.connector.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
+	// if s.connector != nil {
+	// 	if err := s.connector.Close(); err != nil {
+	// 		errs = append(errs, err)
+	// 	}
+	// }
 
 	if s.db != nil {
 		if err := s.db.Close(); err != nil {
@@ -105,7 +99,7 @@ func (s *tursoDB) Close() error {
 	return nil
 }
 
-func (s *tursoDB) GetItemsByCategory(category string) (*[]models.Item, error) {
+func (s *tursoDB) GetItemsByCategory(category string) ([]models.Item, error) {
 	query := `
 	SELECT
 		id,
@@ -114,13 +108,13 @@ func (s *tursoDB) GetItemsByCategory(category string) (*[]models.Item, error) {
 		sub_category,
 		icon,
 		icon_tier_text,
-		name,
+		name,category
 		base_type,
 		rarity,
 		w,
 		h,
 		ilvl,
-		sockets_count,
+		socketed_items,
 		properties,
 		requirements,
 		enchant_mods,
@@ -136,11 +130,11 @@ func (s *tursoDB) GetItemsByCategory(category string) (*[]models.Item, error) {
 		duplicated,
 		corrupted,
 		sanctified,
-		desecrated,
-		buy,
-		sell
+		desecrated
 	FROM items
 	WHERE category = ?`
+
+	slog.Info("getting items")
 
 	rows, err := s.db.Query(query, category)
 	if err != nil {
@@ -165,7 +159,7 @@ func (s *tursoDB) GetItemsByCategory(category string) (*[]models.Item, error) {
 			&i.W,
 			&i.H,
 			&i.Ilvl,
-			&i.SocketsCount,
+			&i.SocketedItems,
 			&i.Properties,
 			&i.Requirements,
 			&i.EnchantMods,
@@ -182,8 +176,6 @@ func (s *tursoDB) GetItemsByCategory(category string) (*[]models.Item, error) {
 			&i.Corrupted,
 			&i.Sanctified,
 			&i.Desecrated,
-			&i.Buy,
-			&i.Sell,
 		)
 		if err != nil {
 			return nil, err
@@ -195,10 +187,10 @@ func (s *tursoDB) GetItemsByCategory(category string) (*[]models.Item, error) {
 		return nil, err
 	}
 
-	return &items, nil
+	return items, nil
 }
 
-func (s *tursoDB) GetItemsBySubCategory(subCategory string) (*[]models.Item, error) {
+func (s *tursoDB) GetItemsBySubCategory(subCategory string) ([]models.Item, error) {
 	query := `
 	SELECT
 		id,
@@ -213,10 +205,9 @@ func (s *tursoDB) GetItemsBySubCategory(subCategory string) (*[]models.Item, err
 		w,
 		h,
 		ilvl,
-		sockets_count,
+		socketed_items,
 		properties,
 		requirements,
-		enchant_mods,
 		rune_mods,
 		implicit_mods,
 		explicit_mods,
@@ -229,11 +220,11 @@ func (s *tursoDB) GetItemsBySubCategory(subCategory string) (*[]models.Item, err
 		duplicated,
 		corrupted,
 		sanctified,
-		desecrated,
-		buy,
-		sell
+		desecrated
 	FROM items
 	WHERE sub_category = ?`
+
+	slog.Info("getting sub items")
 
 	rows, err := s.db.Query(query, subCategory)
 	if err != nil {
@@ -241,7 +232,7 @@ func (s *tursoDB) GetItemsBySubCategory(subCategory string) (*[]models.Item, err
 	}
 	defer rows.Close()
 
-	var items []models.Item
+	var items = []models.Item{}
 
 	for rows.Next() {
 		var i models.Item
@@ -258,10 +249,9 @@ func (s *tursoDB) GetItemsBySubCategory(subCategory string) (*[]models.Item, err
 			&i.W,
 			&i.H,
 			&i.Ilvl,
-			&i.SocketsCount,
+			&i.SocketedItems,
 			&i.Properties,
 			&i.Requirements,
-			&i.EnchantMods,
 			&i.RuneMods,
 			&i.ImplicitMods,
 			&i.ExplicitMods,
@@ -275,8 +265,6 @@ func (s *tursoDB) GetItemsBySubCategory(subCategory string) (*[]models.Item, err
 			&i.Corrupted,
 			&i.Sanctified,
 			&i.Desecrated,
-			&i.Buy,
-			&i.Sell,
 		)
 		if err != nil {
 			return nil, err
@@ -284,9 +272,32 @@ func (s *tursoDB) GetItemsBySubCategory(subCategory string) (*[]models.Item, err
 		items = append(items, i)
 	}
 
-	if err := rows.Err(); err != nil {
+	return items, rows.Err()
+}
+
+func (s *tursoDB) GetPrices(period int64) ([]models.Price, error) {
+	query := `
+	SELECT item_id, price, currency_id, volume, stock, league, timestamp
+	FROM prices
+	WHERE timestamp > ?`
+
+	rows, err := s.db.Query(query, period)
+	if err != nil {
 		return nil, err
 	}
 
-	return &items, nil
+	var prices = []models.Price{}
+
+	for rows.Next() {
+		p := models.Price{}
+
+		err := rows.Scan(&p.ItemID, &p.Price, &p.CurrencyID, &p.Volume, &p.Stock, &p.League, &p.Timestamp)
+		if err != nil {
+			return nil, err
+		}
+
+		prices = append(prices, p)
+	}
+
+	return prices, rows.Err()
 }

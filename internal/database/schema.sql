@@ -9,53 +9,56 @@ CREATE TABLE users (
   role TEXT DEFAULT 'user'
 );
 
+CREATE TABLE stats (
+  id TEXT PRIMARY KEY,
+  text TEXT,
+  type TEXT
+);
+
 CREATE TABLE items (
-  id TEXT PRIMARY KEY DEFAULT (gen_random_uuid()),
-  realm TEXT NOT NULL DEFAULT '',
-  category TEXT NOT NULL DEFAULT '',
-  sub_category TEXT NOT NULL DEFAULT '',
-  icon TEXT NOT NULL DEFAULT '',
-  icon_tier_text TEXT NOT NULL DEFAULT '',
-  name TEXT NOT NULL DEFAULT '',
-  base_type TEXT NOT NULL DEFAULT '',
-  rarity TEXT NOT NULL DEFAULT '',
-  w INTEGER NOT NULL DEFAULT 0,
-  h INTEGER NOT NULL DEFAULT 0,
-  ilvl INTEGER NOT NULL DEFAULT 0,
-  sockets_count INTEGER NOT NULL DEFAULT 0,
-  properties BLOB NOT NULL DEFAULT X'',
-  requirements BLOB NOT NULL DEFAULT X'',
-  enchant_mods BLOB NOT NULL DEFAULT X'',
-  rune_mods BLOB NOT NULL DEFAULT X'',
-  implicit_mods BLOB NOT NULL DEFAULT X'',
-  explicit_mods BLOB NOT NULL DEFAULT X'',
-  fractured_mods BLOB NOT NULL DEFAULT X'',
-  desecrated_mods BLOB NOT NULL DEFAULT X'',
-  flavour_text TEXT NOT NULL DEFAULT '',
-  descr_text TEXT NOT NULL DEFAULT '',
-  sec_descr_text TEXT NOT NULL DEFAULT '',
-  support BOOLEAN NOT NULL DEFAULT 0,
-  duplicated BOOLEAN NOT NULL DEFAULT 0,
-  corrupted BOOLEAN NOT NULL DEFAULT 0,
-  sanctified BOOLEAN NOT NULL DEFAULT 0,
-  desecrated BOOLEAN NOT NULL DEFAULT 0,
-  buy BLOB NOT NULL DEFAULT X'',
-  sell BLOB NOT NULL DEFAULT X'',
+  id TEXT PRIMARY KEY DEFAULT (gen_random_uuid ()),
+  realm TEXT,
+  category TEXT DEFAULT '',
+  sub_category TEXT DEFAULT '',
+  icon TEXT DEFAULT '',
+  icon_tier_text TEXT DEFAULT '',
+  name TEXT DEFAULT '',
+  base_type TEXT DEFAULT '',
+  rarity TEXT DEFAULT '',
+  w INTEGER DEFAULT 0,
+  h INTEGER DEFAULT 0,
+  ilvl INTEGER DEFAULT 0,
+  socketed_items BLOB,
+  properties BLOB,
+  requirements BLOB,
+  enchant_mods BLOB,
+  rune_mods BLOB,
+  implicit_mods BLOB,
+  explicit_mods BLOB,
+  fractured_mods BLOB,
+  desecrated_mods BLOB,
+  flavour_text TEXT DEFAULT '',
+  descr_text TEXT DEFAULT '',
+  sec_descr_text TEXT DEFAULT '',
+  support BOOLEAN DEFAULT 0,
+  duplicated BOOLEAN DEFAULT 0,
+  corrupted BOOLEAN DEFAULT 0,
+  sanctified BOOLEAN DEFAULT 0,
+  desecrated BOOLEAN DEFAULT 0,
   user_id TEXT,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
 CREATE TABLE prices (
   id INTEGER PRIMARY KEY,
-  want_id TEXT,
-  want_count DECIMAL(10,4),
-  have_count DECIMAL(10,4),
-  have_id TEXT,
+  item_id TEXT,
+  price REAL,
+  currency_id TEXT,
+  volume REAL,
+  stock REAL,
   league TEXT,
-  stock INTEGER,
-  volume_traded INTEGER,
-  timestamp TEXT,
-  FOREIGN KEY (want_id) REFERENCES items(id) ON DELETE CASCADE
+  timestamp INTEGER,
+  FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
 );
 
 CREATE TABLE queries (

@@ -19,30 +19,7 @@ type OAuthToken struct {
 	Sub         string `json:"sub"`
 }
 
-type LatestPrice struct {
-	ID       int64   `json:"id"`
-	ItemID   string  `json:"item_id"`
-	Realm    string  `json:"realm"`
-	League   string  `json:"league"`
-	Currency string  `json:"currency"`
-	Value    float64 `json:"value"`
-	Stock    int64   `json:"stock"`
-}
 
-type Price struct {
-	ID           int64    `json:"id"`
-	ItemID       string   `json:"item_id"`
-	Realm        *string  `json:"realm"`
-	League       string   `json:"league"`
-	Currency     string   `json:"currency"`
-	Value        *float64 `json:"value"`
-	LowestRatio  *float64 `json:"lowest_ratio"`
-	HighestRatio *float64 `json:"highest_ratio"`
-	VolumeTraded *int64   `json:"volume_traded"`
-	LowestStock  *int64   `json:"lowest_stock"`
-	HighestStock *int64   `json:"highest_stock"`
-	Timestamp    *int64   `json:"timestamp"`
-}
 
 type User struct {
 	ID          string  `json:"id"`
