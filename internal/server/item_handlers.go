@@ -28,11 +28,11 @@ func (s *Server) GetItemsByCategoryHandler() http.Handler {
 		category := r.PathValue("categoryID")
 		start := time.Now()
 
-		if result, ok := cache[category]; ok && time.Since(result.Timestamp) < time.Hour {
+		if cache, ok := cache[category]; ok && time.Since(cache.Timestamp) < time.Hour {
 			slog.Info("cache hit")
 
 			w.Header().Set("Content-Type", "application/json")
-			if err := json.NewEncoder(w).Encode(result); err != nil {
+			if err := json.NewEncoder(w).Encode(cache.Result); err != nil {
 				slog.Error("encoding items response", "error", err)
 			}
 
@@ -59,7 +59,7 @@ func (s *Server) GetItemsByCategoryHandler() http.Handler {
 
 		cache[category] = CacheValue{Result: items, Timestamp: time.Now()}
 		slog.Info("cache miss")
-		slog.Info("timed", "since", time.Since(start), "path", r.URL.Path)
+		slog.Info("timed", "took", time.Since(start).String(), "path", r.URL.Path)
 
 		w.Header().Set("Content-Type", "application/json")
 

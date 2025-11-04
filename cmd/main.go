@@ -26,16 +26,13 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	var err error
-
 	if os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != "" {
-
 		service := os.Getenv("SERVICE_NAME")
 		logger := otelslog.NewLogger(service)
 
 		otelShutdown, err := telemetry.SetupOTelSDK(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to setup Otel SDK: ", err)
+			return fmt.Errorf("setting Otel SDK: %w", err)
 		}
 		defer otelShutdown(context.Background())
 
@@ -53,7 +50,7 @@ func run() error {
 	}()
 
 	select {
-	case err = <-srvErr:
+	case err := <-srvErr:
 		return err
 	case <-ctx.Done():
 		stop()
