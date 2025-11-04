@@ -78,7 +78,7 @@ func (s *Server) GetItemsBySubCategoryHandler() http.Handler {
 			slog.Info("cache hit")
 
 			w.Header().Set("Content-Type", "application/json")
-			if err := json.NewEncoder(w).Encode(result); err != nil {
+			if err := json.NewEncoder(w).Encode(result.Result); err != nil {
 				slog.Error("encoding items response", "error", err)
 			}
 
