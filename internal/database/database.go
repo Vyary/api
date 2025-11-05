@@ -108,7 +108,7 @@ func (s *tursoDB) GetItemsByCategory(category string) ([]models.Item, error) {
 		sub_category,
 		icon,
 		icon_tier_text,
-		name,category
+		name,
 		base_type,
 		rarity,
 		w,
@@ -117,7 +117,6 @@ func (s *tursoDB) GetItemsByCategory(category string) ([]models.Item, error) {
 		socketed_items,
 		properties,
 		requirements,
-		enchant_mods,
 		rune_mods,
 		implicit_mods,
 		explicit_mods,
@@ -134,7 +133,7 @@ func (s *tursoDB) GetItemsByCategory(category string) ([]models.Item, error) {
 	FROM items
 	WHERE category = ?`
 
-	slog.Info("getting items")
+	slog.Info("getting sub items")
 
 	rows, err := s.db.Query(query, category)
 	if err != nil {
@@ -142,7 +141,7 @@ func (s *tursoDB) GetItemsByCategory(category string) ([]models.Item, error) {
 	}
 	defer rows.Close()
 
-	var items []models.Item
+	var items = []models.Item{}
 
 	for rows.Next() {
 		var i models.Item
@@ -162,7 +161,6 @@ func (s *tursoDB) GetItemsByCategory(category string) ([]models.Item, error) {
 			&i.SocketedItems,
 			&i.Properties,
 			&i.Requirements,
-			&i.EnchantMods,
 			&i.RuneMods,
 			&i.ImplicitMods,
 			&i.ExplicitMods,
@@ -183,11 +181,7 @@ func (s *tursoDB) GetItemsByCategory(category string) ([]models.Item, error) {
 		items = append(items, i)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return items, nil
+	return items, rows.Err()
 }
 
 func (s *tursoDB) GetItemsBySubCategory(subCategory string) ([]models.Item, error) {
