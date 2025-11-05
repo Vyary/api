@@ -7,7 +7,7 @@ import (
 type ItemID string
 type League string
 type Currency string
-type Prices map[Currency]float64
+type Prices map[Currency]PriceDTO
 
 type Price struct {
 	ItemID     ItemID
@@ -17,6 +17,12 @@ type Price struct {
 	Stock      float64
 	League     League
 	Timestamp  int64
+}
+
+type PriceDTO struct {
+	Price  float64 `json:"price"`
+	Volume float64 `json:"volume"`
+	Stock  float64 `json:"stock"`
 }
 
 type Item struct {

@@ -57,9 +57,11 @@ func (s *Server) GetItemsByCategoryHandler() http.Handler {
 			}
 		}
 
-		cache[category] = CacheValue{Result: items, Timestamp: time.Now()}
-		slog.Info("cache miss")
-		slog.Info("timed", "took", time.Since(start).String(), "path", r.URL.Path)
+		if len(items) > 0 {
+			cache[category] = CacheValue{Result: items, Timestamp: time.Now()}
+			slog.Info("cache miss")
+			slog.Info("timed", "took", time.Since(start).String(), "path", r.URL.Path)
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 
@@ -116,8 +118,11 @@ func (s *Server) GetItemsBySubCategoryHandler() http.Handler {
 }
 
 type agg struct {
+	pricePoints   float64
 	weightedSum   float64
 	weightedTotal float64
+	volumeTotal   float64
+	stockTotal    float64
 }
 type currency map[string]*agg
 
@@ -153,22 +158,31 @@ func (s *Server) calculatePrices() error {
 		}
 
 		agg := priceWeights[p.ItemID][p.League][p.CurrencyID]
+		agg.pricePoints += 1
 		agg.weightedSum += p.Price * weight
 		agg.weightedTotal += weight
+		agg.volumeTotal += p.Volume
+		agg.stockTotal += p.Stock
 	}
 
 	for itemID, weights := range priceWeights {
 		for league, wv := range weights {
-			if pricesMap.Map[itemID] == nil {
-				pricesMap.Map[itemID] = map[models.League]models.Prices{}
-			}
-
-			if pricesMap.Map[itemID][league] == nil {
-				pricesMap.Map[itemID][league] = models.Prices{}
-			}
-
 			for currency, v := range wv {
-				pricesMap.Map[itemID][league][models.Currency(currency)] = v.weightedSum / v.weightedTotal
+				if pricesMap.Map[itemID] == nil {
+					pricesMap.Map[itemID] = map[models.League]models.Prices{}
+				}
+
+				if pricesMap.Map[itemID][league] == nil {
+					pricesMap.Map[itemID][league] = models.Prices{}
+				}
+
+				pDTO := models.PriceDTO{
+					Price:  v.weightedSum / v.weightedTotal,
+					Volume: v.volumeTotal / v.pricePoints,
+					Stock:  v.stockTotal / v.pricePoints,
+				}
+
+				pricesMap.Map[itemID][league][models.Currency(currency)] = pDTO
 			}
 		}
 	}
