@@ -19,17 +19,9 @@ type OAuthToken struct {
 	Sub         string `json:"sub"`
 }
 
-
-
-type User struct {
-	ID          string  `json:"id"`
-	Name        string  `json:"username"`
-	AccessToken string  `json:"access_token"`
-	ExpiresIn   int64   `json:"expires_in"`
-	TokenType   string  `json:"token_type"`
-	Scope       string  `json:"scope"`
-	Sub         string  `json:"sub"`
-	Role        *string `json:"role"`
+type UserProfile struct {
+	ID   string `json:"uuid"`
+	Name string `json:"username"`
 }
 
 type JWTClaims struct {

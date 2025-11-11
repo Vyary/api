@@ -29,7 +29,7 @@ type Service interface {
 	RevokeRefreshToken(userID string, tokenID string) error
 	RevokeAllRefreshTokens(userID string) error
 
-	StoreStrategy(user models.User, strategy models.Strategy) (*models.StrategyDTO, error)
+	StoreStrategy(user models.UserProfile, strategy models.Strategy) (*models.StrategyDTO, error)
 	StoreStrategyTable(strategyID string, table models.StrategyTable) (*models.StrategyTable, error)
 	StoreStrategyItem(strategyID string, item models.StrategyItem) error
 

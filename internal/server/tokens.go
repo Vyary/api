@@ -13,7 +13,7 @@ var (
 	jwtRefreshExpiration = 24 * time.Hour * 30
 )
 
-func (s *Server) GenTokenPair(user models.User) (*models.TokenPair, error) {
+func (s *Server) GenTokenPair(user models.UserProfile) (*models.TokenPair, error) {
 	now := time.Now()
 	tokenID := uuid.New().String()
 

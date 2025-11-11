@@ -9,11 +9,9 @@ CREATE TABLE users (
   role TEXT DEFAULT 'user'
 );
 
-CREATE TABLE stats (
-  id TEXT PRIMARY KEY,
-  text TEXT,
-  type TEXT
-);
+CREATE TABLE refresh_tokens (user_id TEXT, token_id TEXT, expires_at TEXT);
+
+CREATE TABLE stats (id TEXT PRIMARY KEY, text TEXT, type TEXT);
 
 CREATE TABLE items (
   id TEXT PRIMARY KEY DEFAULT (gen_random_uuid ()),
@@ -57,8 +55,7 @@ CREATE TABLE prices (
   volume REAL,
   stock REAL,
   league TEXT,
-  timestamp INTEGER,
-  FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
+  timestamp INTEGER
 );
 
 CREATE TABLE queries (
@@ -69,8 +66,8 @@ CREATE TABLE queries (
   search_query TEXT,
   update_interval INTEGER,
   next_run INTEGER,
-  status TEXT CHECK(status IN ('queued', 'in_progress')) DEFAULT 'queued',
+  status TEXT CHECK (status IN ('queued', 'in_progress')) DEFAULT 'queued',
   started_at INTEGER,
   run_once BOOLEAN,
-  FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
+  FOREIGN KEY (item_id) REFERENCES items (id) ON DELETE CASCADE
 );

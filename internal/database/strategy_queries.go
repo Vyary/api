@@ -6,7 +6,7 @@ import (
 	"github.com/Vyary/api/internal/models"
 )
 
-func (s *tursoDB) StoreStrategy(user models.User, strategy models.Strategy) (*models.StrategyDTO, error) {
+func (s *tursoDB) StoreStrategy(user models.UserProfile, strategy models.Strategy) (*models.StrategyDTO, error) {
 	query := `
 	INSERT INTO strategies (user_id, created_by, name, description, atlas, public) 
 	VALUES (?, ?, ?, ?, ?, ?) 

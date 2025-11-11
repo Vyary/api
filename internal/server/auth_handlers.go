@@ -154,7 +154,7 @@ func (s *Server) ExchangeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var user models.User
+	var user models.UserProfile
 	if err = json.NewDecoder(resUser.Body).Decode(&user); err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to decode user")
 		return
@@ -201,7 +201,7 @@ func (s *Server) TokenRefreshHandler(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to revoke token", "user_id", claims.UserID, "token_id", claims.TokenID)
 	}
 
-	tokenPair, err := s.GenTokenPair(models.User{ID: claims.UserID, Name: claims.UserName})
+	tokenPair, err := s.GenTokenPair(models.UserProfile{ID: claims.UserID, Name: claims.UserName})
 	if err != nil {
 		slog.Error("failed to gen JWT tokens", "error", err, "user_uuid", claims.UserID)
 		writeError(w, http.StatusInternalServerError, "Failed to create authentication token")

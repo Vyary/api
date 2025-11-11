@@ -22,7 +22,7 @@ func writeError(w http.ResponseWriter, code int, message string) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func GetUser(r *http.Request) (*models.User, error) {
+func GetUser(r *http.Request) (*models.UserProfile, error) {
 	// return &models.User{ID: "asd", Name: "Vyary"}, nil
 
 	claims, err := GetClaims(r)
@@ -30,7 +30,7 @@ func GetUser(r *http.Request) (*models.User, error) {
 		return nil, err
 	}
 
-	return &models.User{ID: claims.UserID, Name: claims.UserName}, nil
+	return &models.UserProfile{ID: claims.UserID, Name: claims.UserName}, nil
 }
 
 func GetClaims(r *http.Request) (*models.JWTClaims, error) {
