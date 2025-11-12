@@ -21,7 +21,7 @@ type OAuthToken struct {
 
 type UserProfile struct {
 	ID   string `json:"uuid"`
-	Name string `json:"username"`
+	Name string `json:"name"`
 }
 
 type JWTClaims struct {

@@ -2,12 +2,20 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"math"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/Vyary/api/internal/models"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type CacheValue struct {
@@ -20,35 +28,81 @@ type PriceMap struct {
 	Timestamp time.Time
 }
 
-var pricesMap = PriceMap{Map: map[models.ItemID]map[models.League]models.Prices{}}
-var cache = make(map[string]CacheValue)
+type agg struct {
+	pricePoints   float64
+	weightedSum   float64
+	weightedTotal float64
+	volumeTotal   float64
+	stockTotal    float64
+}
 
-func (s *Server) GetItemsByCategoryHandler() http.Handler {
+type currency map[string]*agg
+
+var (
+	pricesMap = PriceMap{Map: map[models.ItemID]map[models.League]models.Prices{}}
+	cache     = make(map[string]CacheValue)
+	service   = os.Getenv("SERVICE_NAME")
+	tracer    = otel.Tracer(service)
+)
+
+func (s *Server) GetItemsHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		category := r.PathValue("categoryID")
+		subCategory := r.PathValue("subcategoryID")
+		if subCategory != "" {
+			category = subCategory
+		}
+
 		start := time.Now()
 
-		if cache, ok := cache[category]; ok && time.Since(cache.Timestamp) < time.Hour {
-			slog.Info("cache hit")
+		ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+		ctx, span := tracer.Start(ctx, "GetItems", trace.WithSpanKind(trace.SpanKindServer))
+		defer span.End()
 
+		span.SetAttributes(
+			attribute.String("http.method", r.Method),
+			attribute.String("http.path", r.URL.Path),
+			attribute.String("category", category),
+			attribute.String("subCategory", subCategory),
+		)
+
+		if cache, ok := cache[category]; ok && time.Since(cache.Timestamp) < time.Hour {
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(cache.Result); err != nil {
 				slog.Error("encoding items response", "error", err)
+
+				span.RecordError(err, trace.WithAttributes(attribute.String("phase", "encode cache")))
+				span.SetStatus(codes.Error, "encoding cache response failed")
 			}
 
-			slog.Info("took", "time", time.Since(start))
+			dur := time.Since(start).String()
+			slog.Info(fmt.Sprintf("Cache hit: %s - %s", category, dur), "function", "GetItemsHandler", "duration", dur)
+
+			span.SetStatus(codes.Ok, "")
 			return
 		}
 
-		items, err := s.db.GetItemsByCategory(category)
+		var items []models.Item
+		var err error
+
+		if subCategory != "" {
+			items, err = s.db.GetItemsBySubCategory(ctx, category)
+		} else {
+			items, err = s.db.GetItemsByCategory(ctx, category)
+		}
 		if err != nil {
 			slog.Error(err.Error())
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+
+			span.RecordError(err, trace.WithAttributes(attribute.String("phase", "db query")))
+			span.SetStatus(codes.Error, "DB query failed")
 			return
 		}
 
 		if err := s.calculatePrices(); err != nil {
 			slog.Error(err.Error())
+
+			span.RecordError(err, trace.WithAttributes(attribute.String("phase", "price calculation")))
 		}
 
 		for i := range items {
@@ -59,72 +113,22 @@ func (s *Server) GetItemsByCategoryHandler() http.Handler {
 
 		if len(items) > 0 {
 			cache[category] = CacheValue{Result: items, Timestamp: time.Now()}
-			slog.Info("cache miss")
-			slog.Info("timed", "took", time.Since(start).String(), "path", r.URL.Path)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-
 		if err := json.NewEncoder(w).Encode(items); err != nil {
 			slog.Error("encoding items response", "error", err)
+
+			span.RecordError(err, trace.WithAttributes(attribute.String("phase", "encode response")))
+			span.SetStatus(codes.Error, "encoding response failed")
 		}
+
+		dur := time.Since(start).String()
+		slog.Info(fmt.Sprintf("Cache miss: %s - %s", category, dur), "function", "GetItemsHandler", "duration", dur)
+
+		span.SetStatus(codes.Ok, "")
 	})
 }
-
-func (s *Server) GetItemsBySubCategoryHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		subCategory := r.PathValue("subcategoryID")
-		start := time.Now()
-
-		if result, ok := cache[subCategory]; ok && time.Since(result.Timestamp) < time.Hour {
-			slog.Info("cache hit")
-
-			w.Header().Set("Content-Type", "application/json")
-			if err := json.NewEncoder(w).Encode(result.Result); err != nil {
-				slog.Error("encoding items response", "error", err)
-			}
-
-			slog.Info("took", "time", time.Since(start))
-			return
-		}
-
-		items, err := s.db.GetItemsBySubCategory(subCategory)
-		if err != nil {
-			slog.Error(err.Error())
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
-		}
-
-		if err := s.calculatePrices(); err != nil {
-			slog.Error(err.Error())
-		}
-
-		for i := range items {
-			if p, ok := pricesMap.Map[items[i].ID]; ok {
-				items[i].Prices = p
-			}
-		}
-
-		cache[subCategory] = CacheValue{Result: items, Timestamp: time.Now()}
-		slog.Info("cache miss")
-		slog.Info("timed", "since", time.Since(start), "path", r.URL.Path)
-
-		w.Header().Set("Content-Type", "application/json")
-
-		if err := json.NewEncoder(w).Encode(items); err != nil {
-			slog.Error("encoding items response", "error", err)
-		}
-	})
-}
-
-type agg struct {
-	pricePoints   float64
-	weightedSum   float64
-	weightedTotal float64
-	volumeTotal   float64
-	stockTotal    float64
-}
-type currency map[string]*agg
 
 func (s *Server) calculatePrices() error {
 	if time.Since(pricesMap.Timestamp) < time.Hour {
@@ -189,7 +193,8 @@ func (s *Server) calculatePrices() error {
 
 	pricesMap.Timestamp = time.Now()
 
-	slog.Info("calculatePrices", "took", time.Since(start))
+	dur := time.Since(start).String()
+	slog.Info(fmt.Sprintf("RUN calculatePrices - %s", dur), "duration", dur)
 
 	return nil
 }

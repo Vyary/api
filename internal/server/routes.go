@@ -15,8 +15,8 @@ import (
 func (s *Server) RegisterRoutes() http.Handler {
 	mux := http.NewServeMux()
 
-	mux.Handle("GET /categories/{categoryID}", CompressMiddleware(s.GetItemsByCategoryHandler()))
-	mux.Handle("GET /subcategories/{subcategoryID}", CompressMiddleware(s.GetItemsBySubCategoryHandler()))
+	mux.Handle("GET /{categoryID}", s.GetItemsHandler())
+	mux.Handle("GET /{categoryID}/{subcategoryID}", s.GetItemsHandler())
 
 	mux.HandleFunc("GET /info", s.InfoHandler)
 
@@ -43,7 +43,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	// mux.HandleFunc("PUT /v1/strategies/{strategy_id}/tables/{table_id}/items/{item_id}", s.UpdateStrategyItemHandler)
 	// mux.HandleFunc("DELETE /v1/strategies/{strategy_id}/tables/{table_id}/items/{item_id}", s.DeleteStrategyItemHandler)
 
-	return mux
+	return CompressMiddleware(mux)
 }
 
 func (s *Server) AddStrategyItemHandler(w http.ResponseWriter, r *http.Request) {

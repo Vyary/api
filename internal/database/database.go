@@ -3,22 +3,26 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
-	"log/slog"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/Vyary/api/internal/models"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	_ "github.com/tursodatabase/libsql-client-go/libsql"
 )
 
 type Service interface {
-	GetItemsByCategory(category string) ([]models.Item, error)
-	GetItemsBySubCategory(category string) ([]models.Item, error)
+	GetItemsByCategory(ctx context.Context, category string) ([]models.Item, error)
+	GetItemsBySubCategory(ctx context.Context, subCategory string) ([]models.Item, error)
 	GetPrices(period int64) ([]models.Price, error)
 
 	StoreOAuthToken(id string, token models.OAuthToken) error
@@ -46,6 +50,8 @@ var (
 	dbURL    = os.Getenv("DB_URL")
 	instance *tursoDB
 	once     sync.Once
+	service  = os.Getenv("SERVICE_NAME")
+	tracer   = otel.Tracer(service)
 )
 
 func Get() Service {
@@ -99,7 +105,7 @@ func (s *tursoDB) Close() error {
 	return nil
 }
 
-func (s *tursoDB) GetItemsByCategory(category string) ([]models.Item, error) {
+func (s *tursoDB) GetItemsByCategory(ctx context.Context, category string) ([]models.Item, error) {
 	query := `
 	SELECT
 		id,
@@ -133,10 +139,22 @@ func (s *tursoDB) GetItemsByCategory(category string) ([]models.Item, error) {
 	FROM items
 	WHERE category = ?`
 
-	slog.Info("getting sub items")
+	_, span := tracer.Start(ctx, "DB.GetItemsByCategory",
+		trace.WithSpanKind(trace.SpanKindInternal),
+	)
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("db.system", "sqlite"),
+		attribute.String("db.operation", "SELECT"),
+		attribute.String("db.table", "items"),
+		attribute.String("category", category),
+	)
 
 	rows, err := s.db.Query(query, category)
 	if err != nil {
+		span.RecordError(err, trace.WithAttributes(attribute.String("phase", "query")))
+		span.SetStatus(codes.Error, "executing query")
 		return nil, err
 	}
 	defer rows.Close()
@@ -176,15 +194,18 @@ func (s *tursoDB) GetItemsByCategory(category string) ([]models.Item, error) {
 			&i.Desecrated,
 		)
 		if err != nil {
+			span.RecordError(err, trace.WithAttributes(attribute.String("phase", "scan")))
+			span.SetStatus(codes.Error, "scanning row")
 			return nil, err
 		}
 		items = append(items, i)
 	}
 
+	span.SetStatus(codes.Ok, fmt.Sprintf("successfully retrieved %d items", len(items)))
 	return items, rows.Err()
 }
 
-func (s *tursoDB) GetItemsBySubCategory(subCategory string) ([]models.Item, error) {
+func (s *tursoDB) GetItemsBySubCategory(ctx context.Context, subCategory string) ([]models.Item, error) {
 	query := `
 	SELECT
 		id,
@@ -218,10 +239,22 @@ func (s *tursoDB) GetItemsBySubCategory(subCategory string) ([]models.Item, erro
 	FROM items
 	WHERE sub_category = ?`
 
-	slog.Info("getting sub items")
+	_, span := tracer.Start(ctx, "DB.GetItemsBySubCategory",
+		trace.WithSpanKind(trace.SpanKindInternal),
+	)
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("db.system", "sqlite"),
+		attribute.String("db.operation", "SELECT"),
+		attribute.String("db.table", "items"),
+		attribute.String("subCategory", subCategory),
+	)
 
 	rows, err := s.db.Query(query, subCategory)
 	if err != nil {
+		span.RecordError(err, trace.WithAttributes(attribute.String("phase", "query")))
+		span.SetStatus(codes.Error, "executing query")
 		return nil, err
 	}
 	defer rows.Close()
@@ -261,11 +294,14 @@ func (s *tursoDB) GetItemsBySubCategory(subCategory string) ([]models.Item, erro
 			&i.Desecrated,
 		)
 		if err != nil {
+			span.RecordError(err, trace.WithAttributes(attribute.String("phase", "scan")))
+			span.SetStatus(codes.Error, "scanning row")
 			return nil, err
 		}
 		items = append(items, i)
 	}
 
+	span.SetStatus(codes.Ok, fmt.Sprintf("successfully retrieved %d items", len(items)))
 	return items, rows.Err()
 }
 
