@@ -7,49 +7,42 @@ package telemetry
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
-	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
-	"golang.org/x/exp/slog"
 )
 
 var (
 	endpoint string
-	service  string
 )
+
+func init() {
+	endpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if endpoint == "" {
+		slog.Error("OTEL_EXPORTER_OTLP_ENDPOINT env var is required")
+		os.Exit(1)
+	}
+}
 
 // SetupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
-func SetupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, err error) {
-	endpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-	service = os.Getenv("SERVICE_NAME")
-
-	if endpoint == "" {
-		slog.Error("OTEL_EXPORTER_OTLP_ENDPOINT environment variable is needed")
-	}
-	if service == "" {
-		slog.Error("SERVICE_NAME environment variable is needed")
-	}
-
+func SetupOTelSDK(ctx context.Context) (func(context.Context) error, error) {
 	var shutdownFuncs []func(context.Context) error
+	var err error
 
 	// shutdown calls cleanup functions registered via shutdownFuncs.
 	// The errors from the calls are joined.
 	// Each registered cleanup will be invoked once.
-	shutdown = func(ctx context.Context) error {
-		var err error
+	shutdown := func(ctx context.Context) error {
 		for _, fn := range shutdownFuncs {
 			err = errors.Join(err, fn(ctx))
 		}
@@ -70,7 +63,7 @@ func SetupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	tracerProvider, err := newTracerProvider()
 	if err != nil {
 		handleErr(err)
-		return
+		return shutdown, err
 	}
 	shutdownFuncs = append(shutdownFuncs, tracerProvider.Shutdown)
 	otel.SetTracerProvider(tracerProvider)
@@ -79,7 +72,7 @@ func SetupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	meterProvider, err := newMeterProvider()
 	if err != nil {
 		handleErr(err)
-		return
+		return shutdown, err
 	}
 	shutdownFuncs = append(shutdownFuncs, meterProvider.Shutdown)
 	otel.SetMeterProvider(meterProvider)
@@ -88,12 +81,12 @@ func SetupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	loggerProvider, err := newLoggerProvider()
 	if err != nil {
 		handleErr(err)
-		return
+		return shutdown, err
 	}
 	shutdownFuncs = append(shutdownFuncs, loggerProvider.Shutdown)
 	global.SetLoggerProvider(loggerProvider)
 
-	return
+	return shutdown, err
 }
 
 func newPropagator() propagation.TextMapPropagator {
@@ -105,63 +98,23 @@ func newPropagator() propagation.TextMapPropagator {
 
 func newTracerProvider() (*trace.TracerProvider, error) {
 	ctx := context.Background()
-
-	traceClient := otlptracegrpc.NewClient(
-		otlptracegrpc.WithInsecure(),
-		otlptracegrpc.WithEndpoint(endpoint))
-
-	exp, err := otlptrace.New(ctx, traceClient)
-	if err != nil {
-		panic(err)
-	}
-
-	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			semconv.ServiceNameKey.String(service),
-		),
-	)
+	exp, err := otlptracegrpc.New(ctx, otlptracegrpc.WithInsecure(), otlptracegrpc.WithEndpoint(endpoint))
 	if err != nil {
 		return nil, err
 	}
 
-	bsp := trace.NewBatchSpanProcessor(exp)
-	tracerProvider := trace.NewTracerProvider(
-		trace.WithSampler(trace.AlwaysSample()),
-		trace.WithResource(res),
-		trace.WithSpanProcessor(bsp),
-	)
+	tracerProvider := trace.NewTracerProvider(trace.WithBatcher(exp))
 	return tracerProvider, nil
 }
 
 func newMeterProvider() (*metric.MeterProvider, error) {
 	ctx := context.Background()
-
-	exp, err := otlpmetricgrpc.New(
-		ctx,
-		otlpmetricgrpc.WithInsecure(),
-		otlpmetricgrpc.WithEndpoint(endpoint))
+	exp, err := otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithInsecure(), otlpmetricgrpc.WithEndpoint(endpoint))
 	if err != nil {
 		return nil, err
 	}
 
-	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			semconv.ServiceNameKey.String(service),
-		),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	meterProvider := metric.NewMeterProvider(
-		metric.WithResource(res),
-		metric.WithReader(
-			metric.NewPeriodicReader(
-				exp,
-				metric.WithInterval(2*time.Second),
-			),
-		),
-	)
+	meterProvider := metric.NewMeterProvider(metric.WithReader(metric.NewPeriodicReader(exp)))
 	return meterProvider, nil
 }
 
@@ -169,19 +122,10 @@ func newLoggerProvider() (*log.LoggerProvider, error) {
 	ctx := context.Background()
 	exp, err := otlploggrpc.New(ctx, otlploggrpc.WithInsecure(), otlploggrpc.WithEndpoint(endpoint))
 	if err != nil {
-		panic(err)
-	}
-
-	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			semconv.ServiceNameKey.String(service),
-		),
-	)
-	if err != nil {
 		return nil, err
 	}
 
 	processor := log.NewBatchProcessor(exp)
-	loggerProvider := log.NewLoggerProvider(log.WithProcessor(processor), log.WithResource(res))
-	return loggerProvider, nil
+	provider := log.NewLoggerProvider(log.WithProcessor(processor))
+	return provider, nil
 }

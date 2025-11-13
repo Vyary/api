@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -71,8 +72,8 @@ func (s *Server) GetItemsHandler() http.Handler {
 			if err := json.NewEncoder(w).Encode(cache.Result); err != nil {
 				slog.Error("encoding items response", "error", err)
 
-				span.RecordError(err, trace.WithAttributes(attribute.String("phase", "encode cache")))
-				span.SetStatus(codes.Error, "encoding cache response failed")
+				span.SetStatus(codes.Error, "encoding cache response")
+				span.RecordError(err)
 			}
 
 			dur := time.Since(start).String()
@@ -94,15 +95,15 @@ func (s *Server) GetItemsHandler() http.Handler {
 			slog.Error(err.Error())
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 
-			span.RecordError(err, trace.WithAttributes(attribute.String("phase", "db query")))
-			span.SetStatus(codes.Error, "DB query failed")
+			span.SetStatus(codes.Error, "DB query")
+			span.RecordError(err)
 			return
 		}
 
-		if err := s.calculatePrices(); err != nil {
+		if err := s.calculatePrices(ctx); err != nil {
 			slog.Error(err.Error())
 
-			span.RecordError(err, trace.WithAttributes(attribute.String("phase", "price calculation")))
+			span.RecordError(err)
 		}
 
 		for i := range items {
@@ -119,8 +120,8 @@ func (s *Server) GetItemsHandler() http.Handler {
 		if err := json.NewEncoder(w).Encode(items); err != nil {
 			slog.Error("encoding items response", "error", err)
 
-			span.RecordError(err, trace.WithAttributes(attribute.String("phase", "encode response")))
 			span.SetStatus(codes.Error, "encoding response failed")
+			span.RecordError(err)
 		}
 
 		dur := time.Since(start).String()
@@ -130,15 +131,22 @@ func (s *Server) GetItemsHandler() http.Handler {
 	})
 }
 
-func (s *Server) calculatePrices() error {
+func (s *Server) calculatePrices(ctx context.Context) error {
 	if time.Since(pricesMap.Timestamp) < time.Hour {
 		return nil
 	}
 
 	start := time.Now()
 
+	_, span := tracer.Start(ctx, "server.calculatePrices",
+		trace.WithSpanKind(trace.SpanKindInternal),
+	)
+	defer span.End()
+
 	prices, err := s.db.GetPrices(time.Now().Add(-24 * time.Hour).UTC().Unix())
 	if err != nil {
+		span.SetStatus(codes.Error, "retrieving prices")
+		span.RecordError(err)
 		return err
 	}
 
@@ -196,5 +204,6 @@ func (s *Server) calculatePrices() error {
 	dur := time.Since(start).String()
 	slog.Info(fmt.Sprintf("RUN calculatePrices - %s", dur), "duration", dur)
 
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
