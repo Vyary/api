@@ -18,18 +18,25 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 )
 
 var (
 	endpoint string
+	service  string
 )
 
 func init() {
 	endpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	service = os.Getenv("SERVICE_NAME")
 	if endpoint == "" {
 		slog.Error("OTEL_EXPORTER_OTLP_ENDPOINT env var is required")
 		os.Exit(1)
+	}
+	if service == "" {
+		slog.Error("SERVICE_NAME env var is needed")
 	}
 }
 
@@ -103,7 +110,16 @@ func newTracerProvider() (*trace.TracerProvider, error) {
 		return nil, err
 	}
 
-	tracerProvider := trace.NewTracerProvider(trace.WithBatcher(exp))
+	res, err := resource.New(ctx,
+		resource.WithAttributes(
+			semconv.ServiceNameKey.String(service),
+		),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	tracerProvider := trace.NewTracerProvider(trace.WithBatcher(exp), trace.WithResource(res))
 	return tracerProvider, nil
 }
 
@@ -114,7 +130,16 @@ func newMeterProvider() (*metric.MeterProvider, error) {
 		return nil, err
 	}
 
-	meterProvider := metric.NewMeterProvider(metric.WithReader(metric.NewPeriodicReader(exp)))
+	res, err := resource.New(ctx,
+		resource.WithAttributes(
+			semconv.ServiceNameKey.String(service),
+		),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	meterProvider := metric.NewMeterProvider(metric.WithReader(metric.NewPeriodicReader(exp)), metric.WithResource(res))
 	return meterProvider, nil
 }
 
@@ -125,7 +150,16 @@ func newLoggerProvider() (*log.LoggerProvider, error) {
 		return nil, err
 	}
 
+	res, err := resource.New(ctx,
+		resource.WithAttributes(
+			semconv.ServiceNameKey.String(service),
+		),
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	processor := log.NewBatchProcessor(exp)
-	provider := log.NewLoggerProvider(log.WithProcessor(processor))
+	provider := log.NewLoggerProvider(log.WithProcessor(processor), log.WithResource(res))
 	return provider, nil
 }
