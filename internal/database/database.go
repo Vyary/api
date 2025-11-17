@@ -23,7 +23,7 @@ import (
 type Service interface {
 	GetItemsByCategory(ctx context.Context, category string) ([]models.Item, error)
 	GetItemsBySubCategory(ctx context.Context, subCategory string) ([]models.Item, error)
-	GetPrices(period int64) ([]models.Price, error)
+	GetPrices(ctx context.Context, period int64) ([]models.Price, error)
 
 	StoreOAuthToken(id string, token models.OAuthToken) error
 	RemoveOAuthToken(id string) error
@@ -153,8 +153,8 @@ func (s *tursoDB) GetItemsByCategory(ctx context.Context, category string) ([]mo
 
 	rows, err := s.db.Query(query, category)
 	if err != nil {
-		span.RecordError(err, trace.WithAttributes(attribute.String("phase", "query")))
 		span.SetStatus(codes.Error, "executing query")
+		span.RecordError(err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -194,8 +194,8 @@ func (s *tursoDB) GetItemsByCategory(ctx context.Context, category string) ([]mo
 			&i.Desecrated,
 		)
 		if err != nil {
-			span.RecordError(err, trace.WithAttributes(attribute.String("phase", "scan")))
 			span.SetStatus(codes.Error, "scanning row")
+			span.RecordError(err)
 			return nil, err
 		}
 		items = append(items, i)
@@ -253,8 +253,8 @@ func (s *tursoDB) GetItemsBySubCategory(ctx context.Context, subCategory string)
 
 	rows, err := s.db.Query(query, subCategory)
 	if err != nil {
-		span.RecordError(err, trace.WithAttributes(attribute.String("phase", "query")))
 		span.SetStatus(codes.Error, "executing query")
+		span.RecordError(err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -294,8 +294,8 @@ func (s *tursoDB) GetItemsBySubCategory(ctx context.Context, subCategory string)
 			&i.Desecrated,
 		)
 		if err != nil {
-			span.RecordError(err, trace.WithAttributes(attribute.String("phase", "scan")))
 			span.SetStatus(codes.Error, "scanning row")
+			span.RecordError(err)
 			return nil, err
 		}
 		items = append(items, i)
@@ -305,14 +305,27 @@ func (s *tursoDB) GetItemsBySubCategory(ctx context.Context, subCategory string)
 	return items, rows.Err()
 }
 
-func (s *tursoDB) GetPrices(period int64) ([]models.Price, error) {
+func (s *tursoDB) GetPrices(ctx context.Context, period int64) ([]models.Price, error) {
 	query := `
 	SELECT item_id, price, currency_id, volume, stock, league, timestamp
 	FROM prices
 	WHERE timestamp > ?`
 
+	_, span := tracer.Start(ctx, "DB.GetPrices",
+		trace.WithSpanKind(trace.SpanKindInternal),
+	)
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("db.system", "sqlite"),
+		attribute.String("db.operation", "SELECT"),
+		attribute.String("db.table", "prices"),
+	)
+
 	rows, err := s.db.Query(query, period)
 	if err != nil {
+		span.SetStatus(codes.Error, "executing query")
+		span.RecordError(err)
 		return nil, err
 	}
 
@@ -323,11 +336,14 @@ func (s *tursoDB) GetPrices(period int64) ([]models.Price, error) {
 
 		err := rows.Scan(&p.ItemID, &p.Price, &p.CurrencyID, &p.Volume, &p.Stock, &p.League, &p.Timestamp)
 		if err != nil {
+			span.SetStatus(codes.Error, "scanning row")
+			span.RecordError(err)
 			return nil, err
 		}
 
 		prices = append(prices, p)
 	}
 
+	span.SetStatus(codes.Ok, fmt.Sprintf("successfully retrieved %d prices", len(prices)))
 	return prices, rows.Err()
 }

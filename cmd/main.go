@@ -26,18 +26,23 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	service := os.Getenv("SERVICE_NAME")
-	logger := otelslog.NewLogger(service)
+	var otelShutdown func(context.Context) error
+	var err error
 
-	otelShutdown, err := telemetry.SetupOTelSDK(ctx)
-	if err != nil {
-		return fmt.Errorf("setting Otel SDK: %w", err)
+	if os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != "" {
+		service := os.Getenv("SERVICE_NAME")
+		logger := otelslog.NewLogger(service)
+
+		otelShutdown, err = telemetry.SetupOTelSDK(ctx)
+		if err != nil {
+			return fmt.Errorf("setting Otel SDK: %w", err)
+		}
+		defer func() {
+			err = errors.Join(err, otelShutdown(context.Background()))
+		}()
+
+		slog.SetDefault(logger)
 	}
-	defer func() {
-		err = errors.Join(err, otelShutdown(context.Background()))
-	}()
-
-	slog.SetDefault(logger)
 
 	db := database.Get()
 	defer db.Close()

@@ -138,12 +138,12 @@ func (s *Server) calculatePrices(ctx context.Context) error {
 
 	start := time.Now()
 
-	_, span := tracer.Start(ctx, "server.calculatePrices",
+	ctx, span := tracer.Start(ctx, "S.calculatePrices",
 		trace.WithSpanKind(trace.SpanKindInternal),
 	)
 	defer span.End()
 
-	prices, err := s.db.GetPrices(time.Now().Add(-24 * time.Hour).UTC().Unix())
+	prices, err := s.db.GetPrices(ctx, time.Now().Add(-24*time.Hour).UTC().Unix())
 	if err != nil {
 		span.SetStatus(codes.Error, "retrieving prices")
 		span.RecordError(err)
@@ -201,8 +201,8 @@ func (s *Server) calculatePrices(ctx context.Context) error {
 
 	pricesMap.Timestamp = time.Now()
 
-	dur := time.Since(start).String()
-	slog.Info(fmt.Sprintf("RUN calculatePrices - %s", dur), "duration", dur)
+	dur := time.Since(start)
+	slog.Info(fmt.Sprintf("calculatePrices - %s", dur), "duration", dur)
 
 	span.SetStatus(codes.Ok, "")
 	return nil

@@ -28,21 +28,19 @@ var (
 	service  string
 )
 
-func init() {
+// SetupOTelSDK bootstraps the OpenTelemetry pipeline.
+// If it does not return an error, make sure to call shutdown for proper cleanup.
+func SetupOTelSDK(ctx context.Context) (func(context.Context) error, error) {
 	endpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 	service = os.Getenv("SERVICE_NAME")
 	if endpoint == "" {
 		slog.Error("OTEL_EXPORTER_OTLP_ENDPOINT env var is required")
-		os.Exit(1)
+		return nil, errors.New("OTEL_EXPORTER_OTLP_ENDPOINT env var is required")
 	}
 	if service == "" {
 		slog.Error("SERVICE_NAME env var is needed")
 	}
-}
 
-// SetupOTelSDK bootstraps the OpenTelemetry pipeline.
-// If it does not return an error, make sure to call shutdown for proper cleanup.
-func SetupOTelSDK(ctx context.Context) (func(context.Context) error, error) {
 	var shutdownFuncs []func(context.Context) error
 	var err error
 
