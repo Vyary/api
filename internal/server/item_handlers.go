@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/Vyary/api/internal/models"
@@ -27,6 +28,7 @@ type CacheValue struct {
 type PriceMap struct {
 	Map       map[models.ItemID]map[models.League]models.Prices
 	Timestamp time.Time
+	mu        sync.Mutex
 }
 
 type agg struct {
@@ -40,7 +42,7 @@ type agg struct {
 type currency map[string]*agg
 
 var (
-	pricesMap = PriceMap{Map: map[models.ItemID]map[models.League]models.Prices{}}
+	pricesMap = PriceMap{}
 	cache     = make(map[string]CacheValue)
 	service   = os.Getenv("SERVICE_NAME")
 	tracer    = otel.Tracer(service)
@@ -132,6 +134,9 @@ func (s *Server) GetItemsHandler() http.Handler {
 }
 
 func (s *Server) calculatePrices(ctx context.Context) error {
+	pricesMap.mu.Lock()
+	defer pricesMap.mu.Unlock()
+
 	if time.Since(pricesMap.Timestamp) < time.Hour {
 		return nil
 	}
@@ -150,7 +155,8 @@ func (s *Server) calculatePrices(ctx context.Context) error {
 		return err
 	}
 
-	var priceWeights = map[models.ItemID]map[models.League]currency{}
+	newPricesMap := make(map[models.ItemID]map[models.League]models.Prices)
+	var priceWeights = make(map[models.ItemID]map[models.League]currency)
 	now := time.Now().UTC().Unix()
 
 	for _, p := range prices {
@@ -158,13 +164,11 @@ func (s *Server) calculatePrices(ctx context.Context) error {
 		weight := float64(p.Volume) * math.Exp(-hoursAgo/1.0)
 
 		if priceWeights[p.ItemID] == nil {
-			priceWeights[p.ItemID] = map[models.League]currency{}
+			priceWeights[p.ItemID] = make(map[models.League]currency)
 		}
-
 		if priceWeights[p.ItemID][p.League] == nil {
-			priceWeights[p.ItemID][p.League] = currency{}
+			priceWeights[p.ItemID][p.League] = make(currency)
 		}
-
 		if priceWeights[p.ItemID][p.League][p.CurrencyID] == nil {
 			priceWeights[p.ItemID][p.League][p.CurrencyID] = &agg{}
 		}
@@ -179,26 +183,27 @@ func (s *Server) calculatePrices(ctx context.Context) error {
 
 	for itemID, weights := range priceWeights {
 		for league, wv := range weights {
+			if newPricesMap[itemID] == nil {
+				newPricesMap[itemID] = make(map[models.League]models.Prices)
+			}
+
+			if newPricesMap[itemID][league] == nil {
+				newPricesMap[itemID][league] = make(models.Prices)
+			}
+
 			for currency, v := range wv {
-				if pricesMap.Map[itemID] == nil {
-					pricesMap.Map[itemID] = map[models.League]models.Prices{}
-				}
-
-				if pricesMap.Map[itemID][league] == nil {
-					pricesMap.Map[itemID][league] = models.Prices{}
-				}
-
 				pDTO := models.PriceDTO{
 					Price:  v.weightedSum / v.weightedTotal,
 					Volume: v.volumeTotal / v.pricePoints,
 					Stock:  v.stockTotal / v.pricePoints,
 				}
 
-				pricesMap.Map[itemID][league][models.Currency(currency)] = pDTO
+				newPricesMap[itemID][league][models.Currency(currency)] = pDTO
 			}
 		}
 	}
 
+	pricesMap.Map = newPricesMap
 	pricesMap.Timestamp = time.Now()
 
 	dur := time.Since(start)
