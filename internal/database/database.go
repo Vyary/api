@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -17,7 +18,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	_ "github.com/tursodatabase/libsql-client-go/libsql"
+	"github.com/tursodatabase/go-libsql"
 )
 
 type Service interface {
@@ -43,11 +44,11 @@ type Service interface {
 }
 
 type tursoDB struct {
-	db *sql.DB
+	db        *sql.DB
+	connector *libsql.Connector
 }
 
 var (
-	dbURL    = os.Getenv("DB_URL")
 	instance *tursoDB
 	once     sync.Once
 	service  = os.Getenv("SERVICE_NAME")
@@ -69,16 +70,26 @@ func Get() Service {
 }
 
 func (s *tursoDB) connect() error {
-	db, err := sql.Open("libsql", dbURL)
+	primaryURL := os.Getenv("TURSO_URL")
+	authToken := os.Getenv("DB_AUTH_TOKEN")
+
+	dir := "./internal/database/local/"
+
+	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+		return fmt.Errorf("error creating directory '%s': %w", dir, err)
+	}
+
+	dbPath := filepath.Join(dir, "local.db")
+
+	interval := 5 * time.Minute
+
+	connector, err := libsql.NewEmbeddedReplicaConnector(dbPath, primaryURL, libsql.WithAuthToken(authToken), libsql.WithSyncInterval(interval))
 	if err != nil {
 		return err
 	}
 
-	db.SetMaxOpenConns(100)
-	db.SetMaxIdleConns(50)
-	db.SetConnMaxLifetime(30 * time.Minute)
-
-	s.db = db
+	s.connector = connector
+	s.db = sql.OpenDB(connector)
 
 	return nil
 }
@@ -86,11 +97,11 @@ func (s *tursoDB) connect() error {
 func (s *tursoDB) Close() error {
 	var errs []error
 
-	// if s.connector != nil {
-	// 	if err := s.connector.Close(); err != nil {
-	// 		errs = append(errs, err)
-	// 	}
-	// }
+	if s.connector != nil {
+		if err := s.connector.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
 
 	if s.db != nil {
 		if err := s.db.Close(); err != nil {
