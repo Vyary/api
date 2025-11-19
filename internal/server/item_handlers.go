@@ -2,9 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"log/slog"
 	"math"
 	"net/http"
 	"os"
@@ -14,9 +11,7 @@ import (
 	"github.com/Vyary/api/internal/models"
 
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -56,32 +51,8 @@ func (s *Server) GetItemsHandler() http.Handler {
 			category = subCategory
 		}
 
-		start := time.Now()
-
-		ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
-		ctx, span := tracer.Start(ctx, "GetItems", trace.WithSpanKind(trace.SpanKindServer))
-		defer span.End()
-
-		span.SetAttributes(
-			attribute.String("http.method", r.Method),
-			attribute.String("http.path", r.URL.Path),
-			attribute.String("category", category),
-			attribute.String("subCategory", subCategory),
-		)
-
 		if cache, ok := cache[category]; ok && time.Since(cache.Timestamp) < time.Hour {
-			w.Header().Set("Content-Type", "application/json")
-			if err := json.NewEncoder(w).Encode(cache.Result); err != nil {
-				slog.Error("encoding items response", "error", err)
-
-				span.SetStatus(codes.Error, "encoding cache response")
-				span.RecordError(err)
-			}
-
-			dur := time.Since(start).String()
-			slog.Info(fmt.Sprintf("Cache hit: %s - %s", category, dur), "function", "GetItemsHandler", "duration", dur)
-
-			span.SetStatus(codes.Ok, "")
+			WriteJSON(r.Context(), w, http.StatusOK, cache.Result)
 			return
 		}
 
@@ -89,23 +60,17 @@ func (s *Server) GetItemsHandler() http.Handler {
 		var err error
 
 		if subCategory != "" {
-			items, err = s.db.GetItemsBySubCategory(ctx, category)
+			items, err = s.db.GetItemsBySubCategory(r.Context(), category)
 		} else {
-			items, err = s.db.GetItemsByCategory(ctx, category)
+			items, err = s.db.GetItemsByCategory(r.Context(), category)
 		}
 		if err != nil {
-			slog.Error(err.Error())
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-
-			span.SetStatus(codes.Error, "DB query")
-			span.RecordError(err)
+			NewInternalError(r.Context(), w, "quering db", err, r.URL.Path)
 			return
 		}
 
-		if err := s.calculatePrices(ctx); err != nil {
-			slog.Error(err.Error())
-
-			span.RecordError(err)
+		if err := s.calculatePrices(r.Context()); err != nil {
+			CaptureError(r.Context(), "calculating prices", err)
 		}
 
 		for i := range items {
@@ -118,18 +83,7 @@ func (s *Server) GetItemsHandler() http.Handler {
 			cache[category] = CacheValue{Result: items, Timestamp: time.Now()}
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(items); err != nil {
-			slog.Error("encoding items response", "error", err)
-
-			span.SetStatus(codes.Error, "encoding response failed")
-			span.RecordError(err)
-		}
-
-		dur := time.Since(start).String()
-		slog.Info(fmt.Sprintf("Cache miss: %s - %s", category, dur), "function", "GetItemsHandler", "duration", dur)
-
-		span.SetStatus(codes.Ok, "")
+		WriteJSON(r.Context(), w, http.StatusOK, items)
 	})
 }
 
@@ -141,8 +95,6 @@ func (s *Server) calculatePrices(ctx context.Context) error {
 		return nil
 	}
 
-	start := time.Now()
-
 	ctx, span := tracer.Start(ctx, "S.calculatePrices",
 		trace.WithSpanKind(trace.SpanKindInternal),
 	)
@@ -150,8 +102,7 @@ func (s *Server) calculatePrices(ctx context.Context) error {
 
 	prices, err := s.db.GetPrices(ctx, time.Now().Add(-24*time.Hour).UTC().Unix())
 	if err != nil {
-		span.SetStatus(codes.Error, "retrieving prices")
-		span.RecordError(err)
+		CaptureError(ctx, "retrieving prices", err)
 		return err
 	}
 
@@ -205,9 +156,6 @@ func (s *Server) calculatePrices(ctx context.Context) error {
 
 	pricesMap.Map = newPricesMap
 	pricesMap.Timestamp = time.Now()
-
-	dur := time.Since(start)
-	slog.Info(fmt.Sprintf("calculatePrices - %s", dur), "duration", dur)
 
 	span.SetStatus(codes.Ok, "")
 	return nil
