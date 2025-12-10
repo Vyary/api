@@ -43,13 +43,13 @@ type Service interface {
 	Close() error
 }
 
-type tursoDB struct {
+type libsqlDB struct {
 	db        *sql.DB
 	connector *libsql.Connector
 }
 
 var (
-	instance *tursoDB
+	instance *libsqlDB
 	once     sync.Once
 	service  = os.Getenv("SERVICE_NAME")
 	tracer   = otel.Tracer(service)
@@ -57,7 +57,7 @@ var (
 
 func Get() Service {
 	once.Do(func() {
-		db := tursoDB{}
+		db := libsqlDB{}
 
 		if err := db.connect(); err != nil {
 			log.Fatal("connecting to db: %w", err)
@@ -69,8 +69,8 @@ func Get() Service {
 	return instance
 }
 
-func (s *tursoDB) connect() error {
-	primaryURL := os.Getenv("TURSO_URL")
+func (s *libsqlDB) connect() error {
+	primaryURL := os.Getenv("DB_URL")
 	authToken := os.Getenv("DB_AUTH_TOKEN")
 
 	dir := "./internal/database/local/"
@@ -81,7 +81,7 @@ func (s *tursoDB) connect() error {
 
 	dbPath := filepath.Join(dir, "local.db")
 
-	interval := 60 * time.Minute
+	interval := time.Minute
 
 	connector, err := libsql.NewEmbeddedReplicaConnector(dbPath, primaryURL, libsql.WithAuthToken(authToken), libsql.WithSyncInterval(interval))
 	if err != nil {
@@ -94,7 +94,7 @@ func (s *tursoDB) connect() error {
 	return nil
 }
 
-func (s *tursoDB) Close() error {
+func (s *libsqlDB) Close() error {
 	var errs []error
 
 	if s.connector != nil {
@@ -116,7 +116,7 @@ func (s *tursoDB) Close() error {
 	return nil
 }
 
-func (s *tursoDB) GetItemsByCategory(ctx context.Context, category string) ([]models.Item, error) {
+func (s *libsqlDB) GetItemsByCategory(ctx context.Context, category string) ([]models.Item, error) {
 	query := `
 	SELECT
 		id,
@@ -216,7 +216,7 @@ func (s *tursoDB) GetItemsByCategory(ctx context.Context, category string) ([]mo
 	return items, rows.Err()
 }
 
-func (s *tursoDB) GetItemsBySubCategory(ctx context.Context, subCategory string) ([]models.Item, error) {
+func (s *libsqlDB) GetItemsBySubCategory(ctx context.Context, subCategory string) ([]models.Item, error) {
 	query := `
 	SELECT
 		id,
@@ -316,7 +316,7 @@ func (s *tursoDB) GetItemsBySubCategory(ctx context.Context, subCategory string)
 	return items, rows.Err()
 }
 
-func (s *tursoDB) GetPrices(ctx context.Context, period int64) ([]models.Price, error) {
+func (s *libsqlDB) GetPrices(ctx context.Context, period int64) ([]models.Price, error) {
 	query := `
 	SELECT item_id, price, currency_id, volume, stock, league, timestamp
 	FROM prices
