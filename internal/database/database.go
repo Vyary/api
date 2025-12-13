@@ -46,6 +46,7 @@ type Service interface {
 type libsqlDB struct {
 	db        *sql.DB
 	connector *libsql.Connector
+	dir       string
 }
 
 var (
@@ -73,10 +74,10 @@ func (s *libsqlDB) connect() error {
 	primaryURL := os.Getenv("DB_URL")
 	authToken := os.Getenv("DB_AUTH_TOKEN")
 
-	dir := "./internal/database/local/"
-
-	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-		return fmt.Errorf("error creating directory '%s': %w", dir, err)
+	dir, err := os.MkdirTemp("", "libsql-*")
+	if err != nil {
+		fmt.Println("Error creating temporary directory:", err)
+		os.Exit(1)
 	}
 
 	dbPath := filepath.Join(dir, "local.db")
@@ -96,6 +97,8 @@ func (s *libsqlDB) connect() error {
 
 func (s *libsqlDB) Close() error {
 	var errs []error
+
+	defer os.RemoveAll(s.dir)
 
 	if s.connector != nil {
 		if err := s.connector.Close(); err != nil {

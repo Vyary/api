@@ -58,6 +58,16 @@ CREATE TABLE prices (
   timestamp INTEGER
 );
 
+CREATE INDEX idx_prices_covering ON prices (
+  timestamp,
+  item_id,
+  price,
+  currency_id,
+  volume,
+  stock,
+  league
+);
+
 CREATE TABLE queries (
   id INTEGER PRIMARY KEY,
   item_id TEXT,
