@@ -39,7 +39,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	// mux.HandleFunc("PUT /v1/strategies/{strategy_id}/tables/{table_id}/items/{item_id}", s.UpdateStrategyItemHandler)
 	// mux.HandleFunc("DELETE /v1/strategies/{strategy_id}/tables/{table_id}/items/{item_id}", s.DeleteStrategyItemHandler)
 
-	return Cors(CompressMiddleware(TraceMiddleware(mux)))
+	return Cors(CompressMiddleware(TraceMiddleware(LogMiddleware(mux))))
 }
 
 func (s *Server) AddStrategyItemHandler(w http.ResponseWriter, r *http.Request) {

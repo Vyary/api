@@ -4,8 +4,10 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/andybalholm/brotli"
 	"go.opentelemetry.io/otel"
@@ -95,5 +97,15 @@ func TraceMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r.WithContext(ctx))
 
 		span.SetStatus(codes.Ok, "")
+	})
+}
+
+func LogMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		next.ServeHTTP(w, r)
+
+		slog.Info(fmt.Sprintf("%s %s - %s", r.Method, r.URL.Path, time.Since(start).String()))
 	})
 }
