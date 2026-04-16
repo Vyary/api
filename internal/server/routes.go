@@ -11,7 +11,7 @@ import (
 func (s *Server) RegisterRoutes() http.Handler {
 	mux := http.NewServeMux()
 
-	mux.Handle("GET /v2/{categoryID}", s.GetItemsHandler())
+	mux.Handle("GET /v2/{category}", s.GetItemsHandler())
 
 	mux.HandleFunc("GET /info", s.InfoHandler)
 
