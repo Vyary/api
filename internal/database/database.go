@@ -24,7 +24,7 @@ import (
 type Service interface {
 	GetItemsByCategory(ctx context.Context, category string) ([]models.Item, error)
 	GetItemsBySubCategory(ctx context.Context, subCategory string) ([]models.Item, error)
-	GetPrices(ctx context.Context, period int64) ([]models.Price, error)
+	GetItems(ctx context.Context, category string, search string, orderBy string, limit int, offset int, league string) ([]models.Item, int, error)
 
 	StoreOAuthToken(id string, token models.OAuthToken) error
 	RemoveOAuthToken(id string) error
@@ -319,45 +319,105 @@ func (s *libsqlDB) GetItemsBySubCategory(ctx context.Context, subCategory string
 	return items, rows.Err()
 }
 
-func (s *libsqlDB) GetPrices(ctx context.Context, period int64) ([]models.Price, error) {
-	query := `
-	SELECT item_id, price, currency_id, volume, stock, league, timestamp
-	FROM prices
-	WHERE timestamp > ?`
+func (s *libsqlDB) GetItems(ctx context.Context, category string, search string, orderBy string, limit int, offset int, league string) ([]models.Item, int, error) {
+	countQuery := `
+	SELECT COUNT(*) 
+	FROM full_items 
+	WHERE
+		(category = ? OR sub_category = ?)
+		AND (name LIKE ? OR base_type LIKE ?)
+	`
+	query := fmt.Sprintf(`
+	SELECT
+		id,
+		realm,
+		category,
+		sub_category,
+		icon,
+		icon_tier_text,
+		name,
+		base_type,
+		rarity,
+		w,
+		h,
+		ilvl,
+		socketed_items,
+		properties,
+		requirements,
+		rune_mods,
+		implicit_mods,
+		explicit_mods,
+		fractured_mods,
+		desecrated_mods,
+		flavour_text,
+		descr_text,
+		sec_descr_text,
+		support,
+		duplicated,
+		corrupted,
+		sanctified,
+		desecrated,
+		%s_prices
+	FROM
+		full_items
+	WHERE
+		(category = ? OR sub_category = ?)
+		AND (name LIKE ? OR base_type LIKE ?)
+	ORDER BY %s
+	LIMIT ? 
+	OFFSET ?`, league, orderBy)
 
-	_, span := tracer.Start(ctx, "DB.GetPrices",
-		trace.WithSpanKind(trace.SpanKindInternal),
-	)
-	defer span.End()
-
-	span.SetAttributes(
-		attribute.String("db.system", "sqlite"),
-		attribute.String("db.operation", "SELECT"),
-		attribute.String("db.table", "prices"),
-	)
-
-	rows, err := s.db.Query(query, period)
+	var total int
+	err := s.db.QueryRowContext(ctx, countQuery, category, category, search, search).Scan(&total)
 	if err != nil {
-		span.SetStatus(codes.Error, "executing query")
-		span.RecordError(err)
-		return nil, err
+		return nil, 0, fmt.Errorf("counting items: %w", err)
 	}
 
-	var prices = []models.Price{}
+	rows, err := s.db.QueryContext(ctx, query, category, category, search, search, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("retrieving items for: %s: %w", category, err)
+	}
+
+	items := make([]models.Item, 0)
 
 	for rows.Next() {
-		p := models.Price{}
-
-		err := rows.Scan(&p.ItemID, &p.Price, &p.CurrencyID, &p.Volume, &p.Stock, &p.League, &p.Timestamp)
+		var i models.Item
+		err := rows.Scan(
+			&i.ID,
+			&i.Realm,
+			&i.Category,
+			&i.SubCategory,
+			&i.Icon,
+			&i.IconTierText,
+			&i.Name,
+			&i.BaseType,
+			&i.Rarity,
+			&i.W,
+			&i.H,
+			&i.Ilvl,
+			&i.SocketedItems,
+			&i.Properties,
+			&i.Requirements,
+			&i.RuneMods,
+			&i.ImplicitMods,
+			&i.ExplicitMods,
+			&i.FracturedMods,
+			&i.DesecratedMods,
+			&i.FlavourText,
+			&i.DescrText,
+			&i.SecDescrText,
+			&i.Support,
+			&i.Duplicated,
+			&i.Corrupted,
+			&i.Sanctified,
+			&i.Desecrated,
+			&i.Prices,
+		)
 		if err != nil {
-			span.SetStatus(codes.Error, "scanning row")
-			span.RecordError(err)
-			return nil, err
+			return nil, 0, fmt.Errorf("scaning item: %w", err)
 		}
-
-		prices = append(prices, p)
+		items = append(items, i)
 	}
 
-	span.SetStatus(codes.Ok, fmt.Sprintf("successfully retrieved %d prices", len(prices)))
-	return prices, rows.Err()
+	return items, total, rows.Err()
 }
